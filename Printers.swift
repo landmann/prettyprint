@@ -40,10 +40,11 @@ enum PrinterDirectory {
         let info = options["printer-info"].flatMap { $0.isEmpty || $0 == queue ? nil : $0 }
         var status = status(queue: queue, options: options)
         if status.canPrint {
-            switch await options["device-uri"].asyncMap(PrinterReachability.isReachable(deviceURI:)) {
-            case .some(true): break
-            case .some(false): status = .offline
-            case .some(nil), nil: status = .unchecked
+            let checked: Bool?? = await options["device-uri"].asyncMap(PrinterReachability.isReachable(deviceURI:))
+            if let reachable = checked ?? nil {
+                if !reachable { status = .offline }
+            } else {
+                status = .unchecked
             }
         }
         return Printer(id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status)
