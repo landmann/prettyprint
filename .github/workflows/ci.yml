@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: bash test.sh
+      - name: Build
+        run: PRETTYPRINT_ARCHS="arm64 x86_64" PRETTYPRINT_CODESIGN_IDENTITY=- bash build.sh
