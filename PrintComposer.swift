@@ -1455,10 +1455,11 @@ private struct PrintComposerRotationDial: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 isDragging = true
-                let dx = value.location.x - radius
-                let dy = value.location.y - radius
+                let dx = Double(value.location.x - radius)
+                let dy = Double(value.location.y - radius)
                 guard (dx * dx + dy * dy).squareRoot() > 4 else { return }
-                onChange(snapped(atan2(dx, -dy) * 180 / .pi))
+                let radians: Double = atan2(dx, -dy)
+                onChange(snapped(radians * 180 / Double.pi))
             }
             .onEnded { _ in isDragging = false }
     }
