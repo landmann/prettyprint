@@ -17,7 +17,7 @@ PrettyPrint lives in the menu bar under the printer icon and opens at login. Tur
 ## Features
 
 - **Print queue.** Drag files onto the menu bar icon or pick them, set copies for each, and print the whole queue.
-- **Any printer.** Lists every printer set up on your Mac with its live status, picks one that's ready, and offers two-sided printing where the printer supports it.
+- **Any printer.** Lists every printer set up on your Mac, checks that each one is actually reachable, picks one that's ready, and offers two-sided printing where the printer supports it.
 - **Page layout.** Place images, PDF pages, and text on one sheet with rulers, gridlines, snapping, and rotation. The page matches the printer's default paper size.
 - **Add printers.** Finds printers on your network and over USB. AirPrint and IPP Everywhere printers are added without a driver; printers with an installed driver use it. Anything else is one click away in macOS Printers & Scanners, which can download Apple-hosted drivers.
 - **Driver finder.** For printers that need a manufacturer driver, see below.
@@ -51,12 +51,12 @@ PrettyPrint has no analytics and no account. It goes online only when you use th
 You need the Xcode command line tools and macOS 14 or later.
 
 ```sh
-bash build.sh     # builds PrettyPrint.app
+bash build.sh     # builds build/PrettyPrint.app
 bash test.sh      # runs the tests
-bash release.sh   # builds a universal, ad-hoc signed PrettyPrint.dmg
+bash release.sh   # builds a universal, ad-hoc signed build/PrettyPrint.dmg
 ```
 
-There are no dependencies and no Xcode project. The scripts compile every `.swift` file with `swiftc`.
+There are no dependencies and no Xcode project. The scripts compile every `.swift` file under `Sources` with `swiftc`. [AGENTS.md](AGENTS.md) maps the folders.
 
 ## License
 

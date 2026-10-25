@@ -5,12 +5,13 @@ cd "$(dirname "$0")"
 test_build_dir="$(mktemp -d)"
 trap 'rm -rf "$test_build_dir"' EXIT
 
-sources=($(ls *.swift Components/*.swift | grep -vx main.swift) tests/PopoverBehaviorTest.swift)
+sources=()
+while IFS= read -r file; do sources+=("$file"); done < <(find Sources -name '*.swift' ! -path Sources/App/PrettyPrintApp.swift | sort)
 
 swiftc \
     -parse-as-library \
     -target "$(uname -m)-apple-macosx14.0" \
-    "${sources[@]}" \
-    -o "$test_build_dir/PopoverBehaviorTest"
+    "${sources[@]}" Tests/PrettyPrintTests.swift \
+    -o "$test_build_dir/PrettyPrintTests"
 
-"$test_build_dir/PopoverBehaviorTest"
+"$test_build_dir/PrettyPrintTests"

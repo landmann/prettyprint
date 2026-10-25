@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct PopoverBehaviorTest {
+struct PrettyPrintTests {
     @MainActor
     static func main() {
         runPrinterSelectionPolicyTests()
@@ -399,19 +399,14 @@ struct PopoverBehaviorTest {
         let onlineDefault = Printer(id: "Office", name: "Office", status: .ready)
         guard select([label, onlineDefault]) == "Office",
               select([office, label, home]) == "Label",
-              select([office, Printer(id: "Label", name: "Label", status: .offline)]) == "Office",
-              select([], current: "Gone") == "Gone",
-              select([office, label], current: "Office", manual: true) == "Office",
+              select([office, Printer(id: "Label", name: "Label", status: .unavailable)]) == "",
+              select([], current: "Gone") == "",
+              select([onlineDefault, label], current: "Label", manual: true) == "Label",
+              select([office, label], current: "Office", manual: true) == "Label",
               select([office, label], current: "Removed", manual: true) == "Label",
-              select([office, label], defaultID: nil) == "Label" else {
-            fatalError("Printer selection must prefer the default when it can print, then the first that can")
-        }
-
-        let unchecked = Printer(id: "Office", name: "Office", status: .unchecked)
-        guard select([unchecked, label]) == "Label",
-              select([unchecked, office]) == "Office",
-              Status.unchecked.canPrint else {
-            fatalError("Printers that can't be checked stay printable but rank below verified ones")
+              select([office, label], defaultID: nil) == "Label",
+              !PrinterStatus.unavailable.canPrint, PrinterStatus.unavailable.title == "Not available" else {
+            fatalError("Selection must pick an available printer and select none when none is available")
         }
 
         guard PrinterReachability.target(forDeviceURI: "ipp://100E73000000.local:631/ipp/print") == .host("100E73000000.local", 631),
@@ -427,7 +422,7 @@ struct PopoverBehaviorTest {
             fatalError("Device URIs must map to the right reachability check")
         }
 
-        print("PASS: printer defaults prefer the CUPS default, then the first printer that can print, and preserve manual selection")
+        print("PASS: selection prefers an available default, keeps an available manual pick, and selects none when nothing is available")
     }
 
     private static func runPrinterParsingTests() {

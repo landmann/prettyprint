@@ -3,7 +3,7 @@ import Foundation
 struct Printer: Identifiable, Equatable {
     let id: String
     let name: String
-    let status: Status
+    let status: PrinterStatus
 }
 
 struct PrinterCapabilities: Equatable {
@@ -44,7 +44,7 @@ enum PrinterDirectory {
             if let reachable = checked ?? nil {
                 if !reachable { status = .offline }
             } else {
-                status = .unchecked
+                status = .unavailable
             }
         }
         return Printer(id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status)
@@ -95,7 +95,7 @@ enum PrinterDirectory {
         return options
     }
 
-    static func status(queue: String, options: [String: String]) -> Status {
+    static func status(queue: String, options: [String: String]) -> PrinterStatus {
         guard let uri = options["printer-uri-supported"],
               URL(string: uri)?.lastPathComponent == queue,
               let state = options["printer-state"],
