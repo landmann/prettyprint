@@ -95,12 +95,16 @@ enum PrinterSetup {
         if printer.model != printer.uri { queries.append(["--make-and-model", printer.model, "-m"]) }
         for query in queries {
             guard let output = await ProcessRunner.output(lpinfo, query, timeout: 20) else { continue }
-            let drivers = output.split(whereSeparator: \.isNewline)
-                .compactMap { $0.split(separator: " ", maxSplits: 1).first.map(String.init) }
-                .filter { $0 != "raw" && $0 != "everywhere" }
+            let lines: [Substring] = output.split(whereSeparator: \.isNewline)
+            let drivers: [String] = lines.compactMap(driverName(inModelLine:))
             if let driver = drivers.first { return driver }
         }
         return nil
+    }
+
+    private static func driverName(inModelLine line: Substring) -> String? {
+        guard let name = line.split(separator: " ", maxSplits: 1).first else { return nil }
+        return name == "raw" || name == "everywhere" ? nil : String(name)
     }
 
     static func add(_ printer: DiscoveredPrinter) async -> Result<Void, PrinterSetupError> {

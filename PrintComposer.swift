@@ -1397,61 +1397,77 @@ private struct PrintComposerRotationDial: View {
     @State private var isDragging = false
     @State private var isHovering = false
 
-    var body: some View {
-        let radius = Self.size / 2
+    private var radius: CGFloat { Self.size / 2 }
 
+    private var faceOpacity: Double {
+        isDragging ? 0.12 : isHovering ? 0.09 : 0.06
+    }
+
+    var body: some View {
+        dial
+            .frame(width: Self.size, height: Self.size)
+            .contentShape(Circle())
+            .onHover { isHovering = $0 }
+            .animation(prettyPrintHoverAnimation, value: isHovering)
+            .animation(prettyPrintHoverAnimation, value: isDragging)
+            .gesture(dragGesture)
+            .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(0) })
+            .prettyPrintButtonCursor()
+            .help("Drag to rotate; double-click to reset.")
+            .accessibilityElement()
+            .accessibilityLabel("Rotation")
+            .accessibilityValue("\(Int(degrees.rounded())) degrees")
+            .accessibilityAdjustableAction(adjust)
+    }
+
+    private var dial: some View {
         ZStack {
             Circle()
-                .fill(Color.primary.opacity(isDragging ? 0.12 : isHovering ? 0.09 : 0.06))
+                .fill(Color.primary.opacity(faceOpacity))
             Circle()
                 .strokeBorder(Color.primary.opacity(isDragging ? 0.35 : 0.18), lineWidth: 1)
-
-            ForEach(0..<4, id: \.self) { quarter in
-                Capsule()
-                    .fill(Color.primary.opacity(0.3))
-                    .frame(width: 1.5, height: 5)
-                    .offset(y: -radius + 6)
-                    .rotationEffect(.degrees(Double(quarter) * 90))
-            }
-
-            Capsule()
-                .fill(composerAccent)
-                .frame(width: 2, height: radius - 9)
-                .offset(y: -(radius - 9) / 2)
-                .rotationEffect(.degrees(degrees))
-
+            ForEach(0..<4, id: \.self, content: tick)
+            needle
             Circle()
                 .fill(composerAccent)
                 .frame(width: 6, height: 6)
         }
-        .frame(width: Self.size, height: Self.size)
-        .contentShape(Circle())
-        .onHover { isHovering = $0 }
-        .animation(prettyPrintHoverAnimation, value: isHovering)
-        .animation(prettyPrintHoverAnimation, value: isDragging)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    isDragging = true
-                    let dx = value.location.x - radius
-                    let dy = value.location.y - radius
-                    guard (dx * dx + dy * dy).squareRoot() > 4 else { return }
-                    onChange(snapped(atan2(dx, -dy) * 180 / .pi))
-                }
-                .onEnded { _ in isDragging = false }
-        )
-        .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(0) })
-        .prettyPrintButtonCursor()
-        .help("Drag to rotate; double-click to reset.")
-        .accessibilityElement()
-        .accessibilityLabel("Rotation")
-        .accessibilityValue("\(Int(degrees.rounded())) degrees")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: onChange(degrees + 1)
-            case .decrement: onChange(degrees - 1)
-            @unknown default: break
+    }
+
+    private func tick(_ quarter: Int) -> some View {
+        Capsule()
+            .fill(Color.primary.opacity(0.3))
+            .frame(width: 1.5, height: 5)
+            .offset(y: -radius + 6)
+            .rotationEffect(.degrees(Double(quarter) * 90))
+    }
+
+    private var needle: some View {
+        let length = radius - 9
+        return Capsule()
+            .fill(composerAccent)
+            .frame(width: 2, height: length)
+            .offset(y: -length / 2)
+            .rotationEffect(.degrees(degrees))
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                isDragging = true
+                let dx = value.location.x - radius
+                let dy = value.location.y - radius
+                guard (dx * dx + dy * dy).squareRoot() > 4 else { return }
+                onChange(snapped(atan2(dx, -dy) * 180 / .pi))
             }
+            .onEnded { _ in isDragging = false }
+    }
+
+    private func adjust(_ direction: AccessibilityAdjustmentDirection) {
+        switch direction {
+        case .increment: onChange(degrees + 1)
+        case .decrement: onChange(degrees - 1)
+        @unknown default: break
         }
     }
 
