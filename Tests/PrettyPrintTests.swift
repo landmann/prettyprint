@@ -17,7 +17,25 @@ struct PrettyPrintTests {
         )
 
         guard popover.behavior == .applicationDefined else {
-            fatalError("PrettyPrint popover must not close when the app deactivates")
+            fatalError("PrettyPrint popover must stay open when the app deactivates so files can be dragged in from Finder")
+        }
+
+        var click = OutsideClickTracker()
+        guard !click.shouldClose(after: .leftMouseDown, at: CGPoint(x: 100, y: 100)),
+              !click.shouldClose(after: .leftMouseDragged, at: CGPoint(x: 102, y: 101)),
+              click.shouldClose(after: .leftMouseUp, at: CGPoint(x: 102, y: 101)) else {
+            fatalError("A click outside the popover must close it")
+        }
+        var drag = OutsideClickTracker()
+        guard !drag.shouldClose(after: .leftMouseDown, at: CGPoint(x: 100, y: 100)),
+              !drag.shouldClose(after: .leftMouseDragged, at: CGPoint(x: 140, y: 120)),
+              !drag.shouldClose(after: .leftMouseUp, at: CGPoint(x: 400, y: 300)),
+              !drag.shouldClose(after: .leftMouseUp, at: CGPoint(x: 400, y: 300)) else {
+            fatalError("Dragging a file in from outside must keep the popover open")
+        }
+        var secondary = OutsideClickTracker()
+        guard secondary.shouldClose(after: .rightMouseDown, at: .zero) else {
+            fatalError("A right-click outside the popover must close it")
         }
 
         let selectedURLs = [
@@ -70,7 +88,7 @@ struct PrettyPrintTests {
         runPrintHistoryStoreTests()
         runPointerFocusDismissalTest()
 
-        print("PASS: PrettyPrint popover behavior is applicationDefined")
+        print("PASS: popover stays open for drags from Finder and closes on an outside click")
         print("PASS: file picker returns ordered batches and restores the popover after cancellation")
         print("PASS: AppKit file picker allows multiple file selection")
     }

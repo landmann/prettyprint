@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Pop
     private var filePickerCoordinator: PopoverFilePickerCoordinator?
     private let composerPresenter = PrintComposerPresenter()
     private let printHistory = PrintHistoryStore()
+    private let outsideClicks = OutsideClickMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installTextEditingMenu()
@@ -108,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Pop
     }
 
     func popoverDidClose(_ notification: Notification) {
+        outsideClicks.stop()
         popoverAnchorWindow?.orderOut(nil)
     }
 
@@ -127,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Pop
             positionPopoverWindow(popoverWindow, below: button)
             popoverWindow.makeKey()
         }
+        outsideClicks.start { [weak self] in self?.closePopover() }
     }
 
     private func positionPopoverWindow(_ window: NSWindow, below button: NSView) {
