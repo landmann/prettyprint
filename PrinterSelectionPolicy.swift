@@ -8,10 +8,11 @@ enum Status: Equatable {
     case attention
     case unavailable
     case offline
+    case unchecked
 
     var canPrint: Bool {
         switch self {
-        case .online, .ready, .printing: true
+        case .online, .ready, .printing, .unchecked: true
         case .checking, .paperNeeded, .paused, .attention, .unavailable, .offline: false
         }
     }
@@ -27,6 +28,7 @@ enum Status: Equatable {
         case .attention: "Check printer"
         case .unavailable: "Unavailable"
         case .offline: "Offline"
+        case .unchecked: "Can’t check"
         }
     }
 }
@@ -42,6 +44,7 @@ enum PrinterSelectionPolicy {
             return currentPrinter
         }
         let preferred = printers.filter { $0.id == defaultPrinterID } + printers.filter { $0.id != defaultPrinterID }
-        return preferred.first(where: \.status.canPrint)?.id ?? preferred.first?.id ?? currentPrinter
+        let verified = preferred.first { $0.status.canPrint && $0.status != .unchecked }
+        return (verified ?? preferred.first(where: \.status.canPrint) ?? preferred.first)?.id ?? currentPrinter
     }
 }

@@ -407,6 +407,26 @@ struct PopoverBehaviorTest {
             fatalError("Printer selection must prefer the default when it can print, then the first that can")
         }
 
+        let unchecked = Printer(id: "Office", name: "Office", status: .unchecked)
+        guard select([unchecked, label]) == "Label",
+              select([unchecked, office]) == "Office",
+              Status.unchecked.canPrint else {
+            fatalError("Printers that can't be checked stay printable but rank below verified ones")
+        }
+
+        guard PrinterReachability.target(forDeviceURI: "ipp://100E73000000.local:631/ipp/print") == .host("100E73000000.local", 631),
+              PrinterReachability.target(forDeviceURI: "ipps://printer.example") == .host("printer.example", 631),
+              PrinterReachability.target(forDeviceURI: "socket://192.168.1.20") == .host("192.168.1.20", 9100),
+              PrinterReachability.target(forDeviceURI: "lpd://10.0.0.5/queue") == .host("10.0.0.5", 515),
+              PrinterReachability.target(forDeviceURI: "dnssd://Brother%20HL-L2350DW%20series._ipp._tcp.local./?uuid=1234")
+                == .service(name: "Brother HL-L2350DW series", type: "_ipp._tcp", domain: "local"),
+              PrinterReachability.target(forDeviceURI: "usb://Brother/QL-820NWB?serial=000G1Z123456")
+                == .usb(model: "QL-820NWB", serial: "000G1Z123456"),
+              PrinterReachability.target(forDeviceURI: "bluetooth://001122334455") == nil,
+              PrinterReachability.target(forDeviceURI: "smb://server/printer") == nil else {
+            fatalError("Device URIs must map to the right reachability check")
+        }
+
         print("PASS: printer defaults prefer the CUPS default, then the first printer that can print, and preserve manual selection")
     }
 

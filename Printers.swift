@@ -38,7 +38,15 @@ enum PrinterDirectory {
     private static func printer(_ queue: String) async -> Printer {
         let options = parseOptions(await ProcessRunner.output(lpoptions, ["-p", queue]) ?? "")
         let info = options["printer-info"].flatMap { $0.isEmpty || $0 == queue ? nil : $0 }
-        return Printer(id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status(queue: queue, options: options))
+        var status = status(queue: queue, options: options)
+        if status.canPrint {
+            switch await options["device-uri"].asyncMap(PrinterReachability.isReachable(deviceURI:)) {
+            case .some(true): break
+            case .some(false): status = .offline
+            case .some(nil), nil: status = .unchecked
+            }
+        }
+        return Printer(id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status)
     }
 
     static func defaultPrinterID(inLpstatOutput output: String) -> String? {
@@ -184,5 +192,12 @@ final class PrinterStore: ObservableObject {
 
     func printer(_ id: String) -> Printer? {
         printers.first { $0.id == id }
+    }
+}
+
+extension Optional {
+    func asyncMap<Mapped>(_ transform: (Wrapped) async -> Mapped) async -> Mapped? {
+        guard let value = self else { return nil }
+        return await transform(value)
     }
 }

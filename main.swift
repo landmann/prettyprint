@@ -898,7 +898,7 @@ struct ContentView: View {
                     Text(title)
                     Spacer()
                     Circle()
-                        .fill(status.canPrint ? Color.green : status == .checking ? Color.gray : Color.red)
+                        .fill(status == .checking || status == .unchecked ? Color.gray : status.canPrint ? Color.green : Color.red)
                         .frame(width: 8, height: 8)
                     Text(status.title)
                         .font(.caption)

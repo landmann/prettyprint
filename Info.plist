@@ -2,31 +2,40 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>PrettyPrint</string>
 	<key>CFBundleDisplayName</key>
 	<string>PrettyPrint</string>
-	<key>CFBundleIdentifier</key>
-	<string>io.github.landmann.prettyprint</string>
 	<key>CFBundleExecutable</key>
 	<string>PrettyPrint</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.landmann.prettyprint</string>
+	<key>CFBundleName</key>
+	<string>PrettyPrint</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.1</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_ipp._tcp</string>
+		<string>_ipps._tcp</string>
+		<string>_printer._tcp</string>
+		<string>_pdl-datastream._tcp</string>
+	</array>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>PrettyPrint copies the documents you choose into its private print queue.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>PrettyPrint copies the documents you choose into its private print queue.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>PrettyPrint copies the documents you choose into its private print queue.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>PrettyPrint checks whether your network printers are reachable.</string>
 </dict>
 </plist>
