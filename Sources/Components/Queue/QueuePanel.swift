@@ -103,7 +103,7 @@ struct QueuePanel: View {
         .prettyPrintKeyMonitor(handleKeyPress)
         .onAppear {
             try? SMAppService.mainApp.register()
-            printers.refresh()
+            refreshPrinters()
         }
         .task {
             while !Task.isCancelled {
@@ -112,7 +112,7 @@ struct QueuePanel: View {
                 } catch {
                     return
                 }
-                printers.refresh()
+                refreshPrinters()
             }
         }
         .onChange(of: printers.printers) {
@@ -192,11 +192,16 @@ struct QueuePanel: View {
         case .printer3: selectPrinter(at: 2)
         case .printer4: selectPrinter(at: 3)
         case .printer5: selectPrinter(at: 4)
-        case .refreshPrinters: printers.refresh()
+        case .refreshPrinters: refreshPrinters()
         case .addPrinter: showAddPrinter()
         default: return false
         }
         return true
+    }
+
+    private func refreshPrinters() {
+        guard !isPrinting else { return }
+        printers.refresh()
     }
 
     private func showShortcutSettings() {
@@ -218,7 +223,7 @@ struct QueuePanel: View {
     private func showAddPrinter() {
         isShowingPrintHistory = false
         onClosePopover()
-        AddPrinterPresenter.shared.show { printers.refresh() }
+        AddPrinterPresenter.shared.show { refreshPrinters() }
     }
 
     private func moveSelection(by offset: Int) -> Bool {
@@ -306,7 +311,8 @@ struct QueuePanel: View {
     }
 
     private var printHistoryPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let rowHeight: CGFloat = 54
+        return VStack(alignment: .leading, spacing: 0) {
             Text("Print history")
                 .font(.headline)
                 .padding(.horizontal, 8)
@@ -319,58 +325,66 @@ struct QueuePanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
             } else {
-                ForEach(Array(printHistory.records.enumerated()), id: \.element.id) { index, record in
-                    let fileName = renameCoordinator.displayName(for: record.fileURL)
-                    if index > 0 {
-                        Divider()
-                            .padding(.leading, 34)
-                            .padding(.trailing, 8)
-                    }
-
-                    Button {
-                        addHistoryToQueue(record)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "doc")
-                                .foregroundStyle(.secondary)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(fileName)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-
-                                Text(record.printedAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer(minLength: 4)
-
-                            Image(systemName: "plus")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 22, height: 20)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(printHistory.records) { record in
+                            printHistoryRow(record, height: rowHeight)
+                                .overlay(alignment: .bottom) {
+                                    if record.id != printHistory.records.last?.id {
+                                        Divider().padding(.leading, 58).padding(.trailing, 8)
+                                    }
+                                }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Add \(fileName) to queue")
-                    .accessibilityValue(record.printedAt.formatted(date: .abbreviated, time: .shortened))
-                    .help("Add to queue")
-                    .prettyPrintHoverHighlight(.row, cornerRadius: 6)
-                    .prettyPrintButtonCursor()
-                    .disabled(isPrinting || isPresentingPrintResult)
                 }
+                .frame(height: CGFloat(min(printHistory.records.count, 6)) * rowHeight)
+                .scrollBounceBehavior(.basedOnSize)
             }
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 12)
-        .frame(width: 260)
+        .frame(width: 320)
         .prettyPrintKeyMonitor(handleHistoryKeyPress)
+    }
+
+    private func printHistoryRow(_ record: PrintedDocumentRecord, height: CGFloat) -> some View {
+        let fileName = renameCoordinator.displayName(for: record.fileURL)
+        let printedAt = record.printedAt.formatted(date: .abbreviated, time: .shortened)
+        return Button {
+            addHistoryToQueue(record)
+        } label: {
+            HStack(spacing: 8) {
+                FileThumbnailView(url: record.fileURL, size: 42)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fileName)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(printedAt)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "plus")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 20)
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: height)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Add \(fileName) to queue")
+        .accessibilityValue(printedAt)
+        .help("Add to queue")
+        .prettyPrintHoverHighlight(.row, cornerRadius: 6)
+        .prettyPrintButtonCursor()
+        .disabled(isPrinting || isPresentingPrintResult)
     }
 
     private func handleHistoryKeyPress(_ press: PrettyPrintKeyPress) -> Bool {
@@ -446,17 +460,14 @@ struct QueuePanel: View {
                 .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: fileDropSurfaceHeight)
+        .frame(height: 150)
         .contentShape(Rectangle())
         .onDrop(of: [.fileURL], isTargeted: nil, perform: handleDrop)
-        .animation(
-            reduceMotion ? .linear(duration: 0.08) : .easeOut(duration: 0.2),
-            value: fileDropSurfaceHeight
-        )
+        .animation(queueFade, value: isPresentingPrintResult || !queuedDocuments.isEmpty)
     }
 
-    private var fileDropSurfaceHeight: CGFloat {
-        isPresentingPrintResult || !queuedDocuments.isEmpty ? 150 : 112
+    private var queueFade: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.16)
     }
 
     private var printResultTransition: AnyTransition {
@@ -468,11 +479,11 @@ struct QueuePanel: View {
         )
     }
 
-    private var documentExitTransition: AnyTransition {
+    private var documentTransition: AnyTransition {
         let removal: AnyTransition = reduceMotion
             ? .opacity
             : .opacity.combined(with: .scale(scale: 0.96))
-        return .asymmetric(insertion: .identity, removal: removal)
+        return .asymmetric(insertion: .opacity, removal: removal)
     }
 
     private func printResultFeedback(_ presentation: PrintResultPresentation) -> some View {
@@ -528,7 +539,7 @@ struct QueuePanel: View {
             documents: queuedDocuments,
             selectedDocumentID: selectedDocumentID,
             paper: printers.paper(for: printer),
-            printerID: printer,
+            printer: printers.printer(printer),
             startsFromBlankCanvas: startsFromBlankCanvas
         )) { result in
             guard let result else { return }
@@ -550,7 +561,7 @@ struct QueuePanel: View {
             onRemove: { removeFile(id: $0) },
             onCopiesChange: { id, copies in updateCopies(id: id, copies: copies) }
         )
-        .transition(documentExitTransition)
+        .transition(documentTransition)
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -630,7 +641,7 @@ struct QueuePanel: View {
     private var printerList: some View {
         if !printers.printers.isEmpty {
             ForEach(printers.printers) { printer in
-                printerRow(title: printer.name, id: printer.id, status: printer.status, onRefresh: printers.refresh)
+                printerRow(title: printer.name, id: printer.id, status: printer.status, onRefresh: refreshPrinters)
             }
         } else if printers.hasLoaded {
             Button(action: showAddPrinter) {
@@ -732,23 +743,26 @@ struct QueuePanel: View {
         }
 
         let document = QueuedDocument(fileURL: url)
-        queuedDocuments.append(document)
-        selectedDocumentID = document.id
+        withAnimation(queueFade) {
+            queuedDocuments.append(document)
+            selectedDocumentID = document.id
+        }
         statusMessage = ""
     }
 
     private func submitPrint(_ submittedDocuments: [QueuedDocument]) {
-        guard !submittedDocuments.isEmpty, !isPrinting, selectedPrinterCanPrint else { return }
+        guard !submittedDocuments.isEmpty, !isPrinting,
+              let destination = printers.printer(printer), destination.status.canPrint else { return }
 
         resetPrintResultPresentation()
         isPrinting = true
         statusMessage = ""
 
-        PrintBatchCoordinator.submit(
-            submittedDocuments,
-            printerID: printer,
-            progress: { printProgress = $0 }
-        ) { result in
+        Task { @MainActor in
+            if destination.singleCopyHelper != nil { await printers.refreshTask?.value }
+            let result = await PrintBatchCoordinator.submit(
+                submittedDocuments, to: destination, progress: { printProgress = $0 }
+            )
             let resultsMatchSubmission = result.documentResults.count == submittedDocuments.count
                 && zip(result.documentResults, submittedDocuments).allSatisfy { result, submitted in
                     result.fileURL == submitted.fileURL && result.requestedCopies == submitted.copies

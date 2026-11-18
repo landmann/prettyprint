@@ -1,5 +1,4 @@
 import AppKit
-import QuickLookThumbnailing
 import SwiftUI
 
 struct PrettyPrintDocumentThumbnailItem: View {
@@ -12,7 +11,10 @@ struct PrettyPrintDocumentThumbnailItem: View {
     let onCopiesChange: (QueuedDocument.ID, Int) -> Void
 
     @ObservedObject private var renameCoordinator = FileRenameCoordinator.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
+
+    private var showsPreviewOverlay: Bool { isHovering && !isPrinting }
 
     private var fileName: String {
         renameCoordinator.displayName(for: document.originalFileURL)
@@ -28,64 +30,41 @@ struct PrettyPrintDocumentThumbnailItem: View {
             .exclusively(before: TapGesture().onEnded { onSelect(document.id) })
     }
 
+    private var thumbnail: some View {
+        Button {
+            onSelect(document.id)
+            onPreview(document.id)
+        } label: {
+            FileThumbnailView(url: document.fileURL)
+                .saturation(showsPreviewOverlay ? 0 : 1)
+                .opacity(showsPreviewOverlay ? 0.48 : 1)
+                .background(PrettyPrintTileFill())
+                .overlay {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.85), radius: 2, y: 1)
+                        .opacity(showsPreviewOverlay ? 1 : 0)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Preview \(fileName)")
+        .help("Preview and arrange")
+        .prettyPrintButtonCursor()
+        .disabled(isPrinting)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: showsPreviewOverlay)
+    }
+
     var body: some View {
         VStack(spacing: 5) {
-            ZStack(alignment: .top) {
-                FileThumbnailView(url: document.fileURL)
-                    .background(PrettyPrintTileFill())
-                    .id(document.fileURL)
-                    .frame(width: 68, height: 68)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.accentColor.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: 6))
-                    .gesture(selectOrRenameGesture)
-                    .help("Double-click to rename")
-
-                if isHovering {
-                    HStack(spacing: 0) {
-                        Button {
-                            onPreview(document.id)
-                        } label: {
-                            Image(systemName: "eye.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .buttonStyle(PrettyPrintThumbnailActionButtonStyle(tint: .blue))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                        .accessibilityLabel("Preview \(fileName)")
-                        .help("Preview and arrange")
-                        .prettyPrintButtonCursor()
-                        .disabled(isPrinting)
-
-                        Spacer(minLength: 0)
-
-                        Button {
-                            onRemove(document.id)
-                        } label: {
-                            Image(systemName: "trash.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .buttonStyle(PrettyPrintThumbnailActionButtonStyle(tint: .red))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                        .accessibilityLabel("Remove \(fileName)")
-                        .help("Remove \(fileName)")
-                        .prettyPrintButtonCursor()
-                        .disabled(isPrinting)
-                    }
-                    .frame(width: 68)
-                    .transition(.identity)
-                }
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 6))
-            .onHover { hovering in
-                withAnimation(.easeOut(duration: 0.12)) {
-                    isHovering = hovering
-                }
-            }
+            thumbnail
 
             Text(fileName)
                 .font(.caption2)
@@ -100,38 +79,10 @@ struct PrettyPrintDocumentThumbnailItem: View {
             PrettyPrintCopyStepper(
                 copies: document.copies,
                 isPrinting: isPrinting,
-                onChange: { onCopiesChange(document.id, $0) }
+                onChange: { onCopiesChange(document.id, $0) },
+                onRemove: { onRemove(document.id) }
             )
         }
         .frame(width: 90)
-    }
-}
-
-struct PrettyPrintThumbnailActionButtonStyle: ButtonStyle {
-    let tint: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        PrettyPrintThumbnailActionButton(configuration: configuration, tint: tint)
-    }
-}
-
-struct PrettyPrintThumbnailActionButton: View {
-    let configuration: ButtonStyle.Configuration
-    let tint: Color
-    @State private var isHovering = false
-
-    var body: some View {
-        configuration.label
-            .symbolRenderingMode(.monochrome)
-            .foregroundStyle(Color.white)
-            .frame(width: 24, height: 24)
-            .background(
-                Circle()
-                    .fill(tint)
-                    .brightness(configuration.isPressed ? -0.18 : isHovering ? 0.1 : 0)
-            )
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .onHover { isHovering = $0 }
-            .animation(prettyPrintHoverAnimation, value: isHovering)
     }
 }

@@ -6,7 +6,7 @@ struct PrintComposerRequest {
     let documents: [QueuedDocument]
     let selectedDocumentID: QueuedDocument.ID?
     let paper: PrintPaper
-    let printerID: String
+    let printer: Printer?
     var startsFromBlankCanvas = false
 }
 

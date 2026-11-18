@@ -4,6 +4,7 @@ struct Printer: Identifiable, Equatable {
     let id: String
     let name: String
     let status: PrinterStatus
+    var singleCopyHelper: URL? = nil
 }
 
 struct PrinterCapabilities: Equatable {
@@ -30,16 +31,21 @@ enum PrinterDirectory {
         return (printers, defaultPrinterID(inLpstatOutput: await defaultOutput ?? ""))
     }
 
-    static func capabilities(for queue: String) async -> PrinterCapabilities {
-        let output = await ProcessRunner.output(lpoptions, ["-p", queue, "-l"]) ?? ""
-        return capabilities(inOptions: output)
+    static func capabilities(for printer: Printer) async -> PrinterCapabilities {
+        let output = await ProcessRunner.output(lpoptions, ["-p", printer.id, "-l"]) ?? ""
+        let capabilities = capabilities(inOptions: output)
+        guard printer.singleCopyHelper != nil else { return capabilities }
+        return PrinterCapabilities(paper: capabilities.paper, sides: [.oneSided])
     }
 
     private static func printer(_ queue: String) async -> Printer {
         let options = parseOptions(await ProcessRunner.output(lpoptions, ["-p", queue]) ?? "")
         let info = options["printer-info"].flatMap { $0.isEmpty || $0 == queue ? nil : $0 }
-        var status = status(queue: queue, options: options)
-        if status.canPrint {
+        let helper = options["device-uri"].flatMap(singleCopyHelper(for:))
+        var status = helper == nil ? status(queue: queue, options: options) : .ready
+        if let helper, !isExecutableFile(helper) {
+            status = .unavailable
+        } else if status.canPrint {
             let checked: Bool?? = await options["device-uri"].asyncMap(PrinterReachability.isReachable(deviceURI:))
             if let reachable = checked ?? nil {
                 if !reachable { status = .offline }
@@ -47,7 +53,25 @@ enum PrinterDirectory {
                 status = .unavailable
             }
         }
-        return Printer(id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status)
+        return Printer(
+            id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status,
+            singleCopyHelper: helper
+        )
+    }
+
+    private static func isExecutableFile(_ url: URL) -> Bool {
+        let target = url.resolvingSymlinksInPath()
+        return (try? target.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+            && FileManager.default.isExecutableFile(atPath: target.path)
+    }
+
+    private static func singleCopyHelper(for deviceURI: String) -> URL? {
+        guard case .bluetooth(let address) = PrinterReachability.target(forDeviceURI: deviceURI) else { return nil }
+        let directory = URL.applicationSupportDirectory
+            .appending(path: "PrettyPrint/Bluetooth Printers", directoryHint: .isDirectory)
+            .appending(path: address.filter(\.isHexDigit).uppercased(), directoryHint: .isDirectory)
+        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        return directory.appending(path: "print-one-copy")
     }
 
     static func defaultPrinterID(inLpstatOutput output: String) -> String? {
@@ -169,21 +193,20 @@ final class PrinterStore: ObservableObject {
     @Published private(set) var printers: [Printer] = []
     @Published private(set) var defaultPrinterID: String?
     @Published private(set) var hasLoaded = false
-    @Published private(set) var isRefreshing = false
+    private(set) var refreshTask: Task<Void, Never>?
     private var capabilities: [String: PrinterCapabilities] = [:]
 
     func refresh() {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        Task {
+        guard refreshTask == nil else { return }
+        refreshTask = Task {
             let loaded = await PrinterDirectory.load()
             for printer in loaded.printers where capabilities[printer.id] == nil {
-                capabilities[printer.id] = await PrinterDirectory.capabilities(for: printer.id)
+                capabilities[printer.id] = await PrinterDirectory.capabilities(for: printer)
             }
             printers = loaded.printers
             defaultPrinterID = loaded.defaultID
             hasLoaded = true
-            isRefreshing = false
+            refreshTask = nil
         }
     }
 

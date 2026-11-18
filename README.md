@@ -21,8 +21,12 @@ PrettyPrint lives in the menu bar under the printer icon and opens at login. Tur
 - **Page layout.** Place images, PDF pages, and text on one sheet with rulers, gridlines, snapping, and rotation. The page matches the printer's default paper size.
 - **Add printers.** Finds printers on your network and over USB. AirPrint and IPP Everywhere printers are added without a driver; printers with an installed driver use it. Anything else is one click away in macOS Printers & Scanners, which can download Apple-hosted drivers.
 - **Driver finder.** For printers that need a manufacturer driver, see below.
-- **Print history.** The last five printed files, one click from the queue.
+- **Print history.** Preview your last 50 printed documents and click one to add it to the queue.
 - **Keyboard shortcuts.** Every action has one, and you can change any of them in Settings.
+
+## Direct Bluetooth label printing
+
+For a Bluetooth label printer that needs a direct connection, place its executable helper at `~/Library/Application Support/PrettyPrint/Bluetooth Printers/<address>/print-one-copy`. Use the printer's 12-digit Bluetooth address in uppercase without separators. Remove the address folder to return to macOS printing. The helper takes one file path, sends one single-sided copy, and exits successfully once the transfer finishes. PrettyPrint waits for each transfer before starting the next. If a transfer fails, the queue keeps the unconfirmed copies.
 
 ## Driver finder
 

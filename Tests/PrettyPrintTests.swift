@@ -4,7 +4,7 @@ import SwiftUI
 @main
 struct PrettyPrintTests {
     @MainActor
-    static func main() {
+    static func main() async {
         runPrinterSelectionPolicyTests()
         runPrintPaperTests()
         runPrinterParsingTests()
@@ -82,8 +82,8 @@ struct PrettyPrintTests {
             fatalError("File picker must allow multiple files and reject directories")
         }
 
-        runPrintInvocationTests()
-        runPrintOutcomeTests()
+        await runPrintInvocationTests()
+        await runPrintOutcomeTests()
         runPrintQueueCompletionTests()
         runPrintHistoryStoreTests()
         runPointerFocusDismissalTest()
@@ -118,7 +118,7 @@ struct PrettyPrintTests {
     }
 
     @MainActor
-    private static func runPrintInvocationTests() {
+    private static func runPrintInvocationTests() async {
         let files = [
             URL(fileURLWithPath: "/tmp/label one.pdf"),
             URL(fileURLWithPath: "/tmp/label's two.pdf"),
@@ -133,7 +133,13 @@ struct PrettyPrintTests {
             fatalError("Copy counts must be clamped to the 1-20 range")
         }
 
-        let invocations = PrintBatchCoordinator.invocations(for: documents, printerID: "Office_Laser")
+        let office = Printer(id: "Office_Laser", name: "Office", status: .ready)
+        var invocations: [PrintInvocation] = []
+        let cupsResult = await PrintBatchCoordinator.submit(documents, to: office, runner: {
+            invocations.append($0)
+            return true
+        })
+        guard cupsResult.submittedCopies == 4 else { fatalError("CUPS must submit all requested copies") }
         guard invocations == [
             PrintInvocation(
                 executableURL: URL(fileURLWithPath: "/usr/bin/lp"),
@@ -147,11 +153,36 @@ struct PrettyPrintTests {
             fatalError("Print invocations must preserve order, paths, and copy counts")
         }
 
-        print("PASS: print invocations preserve batch order without shell interpolation")
+        let helper = URL(fileURLWithPath: "/tmp/simulated-printer")
+        let bluetooth = Printer(id: "Labels", name: "Labels", status: .ready, singleCopyHelper: helper)
+        for quantity in 1...20 {
+            let batch = [QueuedDocument(fileURL: files[0], copies: quantity), documents[1]]
+            var calls: [PrintInvocation] = []
+            var progress: [PrintBatchProgress] = []
+            let result = await PrintBatchCoordinator.submit(batch, to: bluetooth, runner: {
+                calls.append($0)
+                return true
+            }, progress: { progress.append($0) })
+            let expectedPaths = Array(repeating: files[0].path, count: quantity)
+                + Array(repeating: files[1].path, count: documents[1].copies)
+            guard calls == expectedPaths.map({ PrintInvocation(executableURL: helper, arguments: [$0]) }),
+                  result.documentResults.map(\.submittedCopies) == [quantity, 3],
+                  progress == (0...expectedPaths.count).map({ PrintBatchProgress(submittedCopies: $0, totalCopies: expectedPaths.count) }) else {
+                fatalError("Bluetooth must send each of the requested copies in order")
+            }
+        }
+
+        var duplex = documents[0]
+        duplex.sides = .longEdge
+        let unsupported = await PrintBatchCoordinator.submit([documents[0], duplex], to: bluetooth, runner: { _ in
+            fatalError("A single-sided helper must reject a duplex batch before submission")
+        })
+        guard unsupported.submittedCopies == 0 else { fatalError("Duplex validation must leave the batch queued") }
+        print("PASS: Bluetooth sends quantities 1 through 20 in order and CUPS preserves native copy counts")
     }
 
     @MainActor
-    private static func runPrintOutcomeTests() {
+    private static func runPrintOutcomeTests() async {
         let files = [
             URL(fileURLWithPath: "/tmp/a.pdf"),
             URL(fileURLWithPath: "/tmp/b.pdf"),
@@ -159,31 +190,50 @@ struct PrettyPrintTests {
         ]
         let simulatedOutcomes = [true, false, true]
         var nextOutcomeIndex = 0
-        var receivedResult: PrintBatchResult?
-
-        PrintBatchCoordinator.submit(
-            files,
-            printerID: "Office_Laser",
-            runner: { _, completion in
-                let outcome = simulatedOutcomes[nextOutcomeIndex]
-                nextOutcomeIndex += 1
-                completion(outcome)
-            }
-        ) { result in
-            receivedResult = result
-        }
+        let office = Printer(id: "Office_Laser", name: "Office", status: .ready)
+        let receivedResult = await PrintBatchCoordinator.submit(files.map { QueuedDocument(fileURL: $0) }, to: office, runner: { _ in
+            let outcome = simulatedOutcomes[nextOutcomeIndex]
+            nextOutcomeIndex += 1
+            return outcome
+        })
 
         let expectedResults = zip(files, [1, 0, 0]).map {
             PrintDocumentResult(fileURL: $0, requestedCopies: 1, submittedCopies: $1)
         }
         guard receivedResult == PrintBatchResult(documentResults: expectedResults),
               nextOutcomeIndex == 2,
-              receivedResult?.succeeded == 1,
-              receivedResult?.failed == 2 else {
+              receivedResult.succeeded == 1,
+              receivedResult.failed == 2 else {
             fatalError("A failed submission must stop the batch and leave later documents unsent")
         }
 
-        print("PASS: a failed submission stops the batch in order")
+        let bluetooth = Printer(id: "Labels", name: "Labels", status: .ready, singleCopyHelper: URL(fileURLWithPath: "/tmp/simulated-printer"))
+        let batch = [QueuedDocument(fileURL: files[0], copies: 4), QueuedDocument(fileURL: files[1], copies: 2)]
+        var paths: [String] = []
+        let interrupted = await PrintBatchCoordinator.submit(batch, to: bluetooth, runner: { invocation in
+            paths.append(contentsOf: invocation.arguments)
+            return paths.count < 3
+        })
+        let counts = interrupted.documentResults.map(\.submittedCopies)
+        let remainder = reducePrintQueueCompletion(submitted: batch, currentQueue: batch, submittedCopies: counts).remainingQueue
+        guard paths == Array(repeating: files[0].path, count: 3), counts == [2, 0],
+              remainder.map(\.id) == batch.map(\.id), remainder.map(\.copies) == [2, 2] else {
+            fatalError("An interrupted Bluetooth batch must retain only the unconfirmed copies and later documents")
+        }
+        var retryPaths: [String] = []
+        let resumed = await PrintBatchCoordinator.submit(remainder, to: bluetooth, runner: { invocation in
+            retryPaths.append(contentsOf: invocation.arguments)
+            return true
+        })
+        guard resumed.failed == 0, retryPaths == [files[0].path, files[0].path, files[1].path, files[1].path] else {
+            fatalError("A second submission must send only the remaining copies")
+        }
+        let verboseSuccess = await ProcessRunner.succeeds(URL(fileURLWithPath: "/usr/bin/head"), [
+            "-c", String(ProcessRunner.maximumOutputBytes + 1), "/dev/zero"
+        ])
+        let failedExit = await ProcessRunner.succeeds(URL(fileURLWithPath: "/usr/bin/false"), [])
+        guard verboseSuccess, !failedExit else { fatalError("Only the exit status should acknowledge a transfer") }
+        print("PASS: interrupted batches stop at the failed copy and preserve the remainder for retry")
     }
 
     private static func runPrintQueueCompletionTests() {
@@ -260,17 +310,17 @@ struct PrettyPrintTests {
         }
         defaults.removeObject(forKey: PrintHistoryStore.storageKey)
 
-        let fileURLs = (1...6).map {
+        let fileURLs = (1...51).map {
             URL(fileURLWithPath: "/tmp/document-\($0).pdf")
         }
         let printDate = Date(timeIntervalSince1970: 1_700_000_000)
         let store = PrintHistoryStore(defaults: defaults)
         store.recordSuccessfulPrints(fileURLs, printedAt: printDate)
 
-        let expectedURLs = Array(fileURLs.reversed().prefix(5))
+        let expectedURLs = Array(fileURLs.reversed().prefix(50))
         guard store.records.map(\.fileURL) == expectedURLs,
               store.records.allSatisfy({ $0.printedAt == printDate }) else {
-            fatalError("Print history must keep the five newest completed documents")
+            fatalError("Print history must keep the 50 newest completed documents")
         }
 
         let reloadedStore = PrintHistoryStore(defaults: defaults)
@@ -278,7 +328,7 @@ struct PrettyPrintTests {
             fatalError("Print history must persist across store instances")
         }
 
-        print("PASS: print history persists the five newest successful documents")
+        print("PASS: print history persists the 50 newest successful documents")
     }
 
     private static func runPrintPaperTests() {
@@ -435,7 +485,7 @@ struct PrettyPrintTests {
                 == .service(name: "Brother HL-L2350DW series", type: "_ipp._tcp", domain: "local"),
               PrinterReachability.target(forDeviceURI: "usb://Brother/QL-820NWB?serial=000G1Z123456")
                 == .usb(model: "QL-820NWB", serial: "000G1Z123456"),
-              PrinterReachability.target(forDeviceURI: "bluetooth://001122334455") == nil,
+              PrinterReachability.target(forDeviceURI: "bluetooth://001122334455") == .bluetooth(address: "001122334455"),
               PrinterReachability.target(forDeviceURI: "smb://server/printer") == nil else {
             fatalError("Device URIs must map to the right reachability check")
         }

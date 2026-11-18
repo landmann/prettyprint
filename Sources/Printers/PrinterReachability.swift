@@ -1,4 +1,5 @@
 import Foundation
+import IOBluetooth
 import IOKit
 import Network
 
@@ -6,6 +7,7 @@ enum PrinterProbeTarget: Equatable {
     case host(String, UInt16)
     case service(name: String, type: String, domain: String)
     case usb(model: String, serial: String?)
+    case bluetooth(address: String)
 }
 
 enum PrinterReachability {
@@ -23,6 +25,9 @@ enum PrinterReachability {
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             let serial = components.queryItems?.first { $0.name == "serial" }?.value
             return model.isEmpty && serial == nil ? nil : .usb(model: model, serial: serial)
+        case "bluetooth":
+            guard host.wholeMatch(of: #/(?:[0-9A-Fa-f]{12}|(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})/#) != nil else { return nil }
+            return .bluetooth(address: host)
         default:
             let ports: [String: UInt16] = ["ipp": 631, "ipps": 631, "http": 631, "https": 443, "socket": 9100, "lpd": 515]
             guard let defaultPort = ports[scheme], !host.isEmpty else { return nil }
@@ -39,9 +44,31 @@ enum PrinterReachability {
             return await connects(to: .service(name: name, type: type, domain: domain, interface: nil))
         case .usb(let model, let serial):
             return connectedUSBDevices().contains { $0.matches(model: model, serial: serial) }
+        case .bluetooth(let address):
+            return await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(returning: bluetoothIsReachable(address: address))
+                }
+            }
         case nil:
             return nil
         }
+    }
+
+    private static func bluetoothIsReachable(address: String) -> Bool? {
+        guard let device = IOBluetoothDevice(addressString: address) else { return nil }
+        if device.isConnected() { return true }
+
+        let slotsPerSecond = 1600.0
+        let status = device.openConnection(
+            nil, withPageTimeout: BluetoothHCIPageTimeout(timeout * slotsPerSecond), authenticationRequired: false
+        )
+        if status == kIOReturnSuccess {
+            device.closeConnection()
+            return true
+        }
+        if status == kIOReturnNotPermitted || status == kIOReturnNotPrivileged { return nil }
+        return device.isConnected()
     }
 
     private final class Outcome: @unchecked Sendable {

@@ -4,22 +4,30 @@ struct PrettyPrintCopyStepper: View {
     let copies: Int
     let isPrinting: Bool
     let onChange: (Int) -> Void
+    let onRemove: () -> Void
+
+    private var decreaseLabel: String {
+        copies == QueuedDocument.minimumCopies ? "Remove from queue" : "Decrease copies"
+    }
 
     var body: some View {
         HStack(spacing: 0) {
             Button {
-                guard copies > QueuedDocument.minimumCopies else { return }
-                onChange(copies - 1)
+                if copies == QueuedDocument.minimumCopies {
+                    onRemove()
+                } else {
+                    onChange(copies - 1)
+                }
             } label: {
                 Image(systemName: "minus")
             }
             .buttonStyle(
                 PrettyPrintCopyStepperButtonStyle(
-                    isAtLimit: isPrinting || copies <= QueuedDocument.minimumCopies
+                    isAtLimit: isPrinting
                 )
             )
-            .accessibilityLabel("Decrease copies")
-            .help("Decrease copies")
+            .accessibilityLabel(decreaseLabel)
+            .help(decreaseLabel)
             .prettyPrintButtonCursor()
             .disabled(isPrinting)
 

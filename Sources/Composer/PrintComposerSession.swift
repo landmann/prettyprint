@@ -83,7 +83,7 @@ final class PrintComposerSession: ObservableObject {
     @Published private(set) var scrollRequest: UUID?
     @Published private(set) var pendingDocumentImports = 0
     let paper: PrintPaper
-    let printerID: String
+    private let printer: Printer?
     var onFinish: ((PrintComposerResult?) -> Void)?
     private let originalDocumentIDs: Set<QueuedDocument.ID>
     private let stager = PrettyPrintDocumentStager()
@@ -91,7 +91,7 @@ final class PrintComposerSession: ObservableObject {
 
     init(request: PrintComposerRequest) {
         paper = request.paper
-        printerID = request.printerID
+        printer = request.printer
         originalDocumentIDs = Set(request.documents.map(\.id))
         documents = request.documents.map { PrintComposerDocument(document: $0) }
         if request.startsFromBlankCanvas {
@@ -120,7 +120,11 @@ final class PrintComposerSession: ObservableObject {
     }
 
     func loadCapabilities() async {
-        supportedSides = await PrinterDirectory.capabilities(for: printerID).sides
+        guard let printer else {
+            supportedSides = [.oneSided]
+            return
+        }
+        supportedSides = await PrinterDirectory.capabilities(for: printer).sides
     }
 
     func loadSelectedDocument() async {

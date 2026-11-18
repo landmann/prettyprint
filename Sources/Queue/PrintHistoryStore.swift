@@ -15,7 +15,7 @@ struct PrintedDocumentRecord: Identifiable, Codable, Equatable {
 
 final class PrintHistoryStore: ObservableObject {
     static let storageKey = "printHistory.v1"
-    static let maximumRecordCount = 5
+    static let maximumRecordCount = 50
 
     @Published private(set) var records: [PrintedDocumentRecord]
 

@@ -12,6 +12,25 @@ enum ProcessRunner {
     static let maximumOutputBytes = 1_048_576
     private static let drainGrace: TimeInterval = 2
 
+    static func succeeds(_ executable: URL, _ arguments: [String]) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            process.terminationHandler = { process in
+                continuation.resume(returning: process.terminationReason == .exit && process.terminationStatus == 0)
+            }
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(returning: false)
+            }
+        }
+    }
+
     static func output(_ executable: String, _ arguments: [String], timeout: TimeInterval = 5) async -> String? {
         guard let result = await run(executable, arguments, timeout: timeout), result.succeeded else { return nil }
         return result.standardOutput
