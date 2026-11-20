@@ -7,12 +7,13 @@ enum PrinterStatus: Equatable {
     case paused
     case attention
     case unavailable
+    case localNetworkBlocked
     case offline
 
     var canPrint: Bool {
         switch self {
         case .online, .ready, .printing: true
-        case .checking, .paperNeeded, .paused, .attention, .unavailable, .offline: false
+        case .checking, .paperNeeded, .paused, .attention, .unavailable, .localNetworkBlocked, .offline: false
         }
     }
 
@@ -26,6 +27,7 @@ enum PrinterStatus: Equatable {
         case .paused: "Paused"
         case .attention: "Check printer"
         case .unavailable: "Not available"
+        case .localNetworkBlocked: "No network access"
         case .offline: "Offline"
         }
     }

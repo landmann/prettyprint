@@ -10,6 +10,21 @@ enum PrinterProbeTarget: Equatable {
     case bluetooth(address: String)
 }
 
+enum PrinterReach: Equatable {
+    case reachable
+    case unreachable
+    case localNetworkBlocked
+    case unconfirmed
+
+    init(_ confirmed: Bool?) {
+        switch confirmed {
+        case true?: self = .reachable
+        case false?: self = .unreachable
+        case nil: self = .unconfirmed
+        }
+    }
+}
+
 enum PrinterReachability {
     static let timeout: TimeInterval = 3
 
@@ -35,23 +50,23 @@ enum PrinterReachability {
         }
     }
 
-    static func isReachable(deviceURI uri: String) async -> Bool? {
+    static func reach(deviceURI uri: String) async -> PrinterReach {
         switch target(forDeviceURI: uri) {
         case .host(let host, let port):
-            guard let port = NWEndpoint.Port(rawValue: port) else { return nil }
+            guard let port = NWEndpoint.Port(rawValue: port) else { return .unconfirmed }
             return await connects(to: .hostPort(host: NWEndpoint.Host(host), port: port))
         case .service(let name, let type, let domain):
             return await connects(to: .service(name: name, type: type, domain: domain, interface: nil))
         case .usb(let model, let serial):
-            return connectedUSBDevices().contains { $0.matches(model: model, serial: serial) }
+            return PrinterReach(connectedUSBDevices().contains { $0.matches(model: model, serial: serial) })
         case .bluetooth(let address):
             return await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
-                    continuation.resume(returning: bluetoothIsReachable(address: address))
+                    continuation.resume(returning: PrinterReach(bluetoothIsReachable(address: address)))
                 }
             }
         case nil:
-            return nil
+            return .unconfirmed
         }
     }
 
@@ -73,15 +88,15 @@ enum PrinterReachability {
 
     private final class Outcome: @unchecked Sendable {
         private let lock = NSLock()
-        private var continuation: CheckedContinuation<Bool?, Never>?
+        private var continuation: CheckedContinuation<PrinterReach, Never>?
         private let connection: NWConnection
 
-        init(_ continuation: CheckedContinuation<Bool?, Never>, connection: NWConnection) {
+        init(_ continuation: CheckedContinuation<PrinterReach, Never>, connection: NWConnection) {
             self.continuation = continuation
             self.connection = connection
         }
 
-        func finish(_ result: Bool?) {
+        func finish(_ result: PrinterReach) {
             lock.lock()
             let pending = continuation
             continuation = nil
@@ -92,20 +107,21 @@ enum PrinterReachability {
         }
     }
 
-    private static func connects(to endpoint: NWEndpoint) async -> Bool? {
+    private static func connects(to endpoint: NWEndpoint) async -> PrinterReach {
         await withCheckedContinuation { continuation in
             let connection = NWConnection(to: endpoint, using: .tcp)
             let outcome = Outcome(continuation, connection: connection)
             let queue = DispatchQueue(label: "PrettyPrint.reachability")
             connection.stateUpdateHandler = { state in
                 switch state {
-                case .ready: outcome.finish(true)
-                case .waiting(let error), .failed(let error): outcome.finish(isPolicyDenied(error) ? nil : false)
+                case .ready: outcome.finish(.reachable)
+                case .waiting(let error), .failed(let error):
+                    outcome.finish(isPolicyDenied(error) ? .localNetworkBlocked : .unreachable)
                 default: break
                 }
             }
             connection.start(queue: queue)
-            queue.asyncAfter(deadline: .now() + timeout) { outcome.finish(false) }
+            queue.asyncAfter(deadline: .now() + timeout) { outcome.finish(.unreachable) }
         }
     }
 

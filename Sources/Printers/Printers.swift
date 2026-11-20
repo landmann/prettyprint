@@ -20,12 +20,14 @@ enum PrinterDirectory {
         async let queueOutput = ProcessRunner.output(lpstat, ["-e"])
         async let defaultOutput = ProcessRunner.output(lpstat, ["-d"])
         let queues = (await queueOutput ?? "").split(whereSeparator: \.isNewline).map(String.init)
-        let printers = await withTaskGroup(of: (Int, Printer).self) { group in
+        let printers = await withTaskGroup(of: (Int, Printer?).self) { group in
             for (index, queue) in queues.enumerated() {
-                group.addTask { (index, await printer(queue)) }
+                group.addTask { (index, await installedPrinter(queue)) }
             }
             var loaded: [(Int, Printer)] = []
-            for await entry in group { loaded.append(entry) }
+            for await (index, printer) in group {
+                if let printer { loaded.append((index, printer)) }
+            }
             return loaded.sorted { $0.0 < $1.0 }.map(\.1)
         }
         return (printers, defaultPrinterID(inLpstatOutput: await defaultOutput ?? ""))
@@ -38,25 +40,30 @@ enum PrinterDirectory {
         return PrinterCapabilities(paper: capabilities.paper, sides: [.oneSided])
     }
 
-    private static func printer(_ queue: String) async -> Printer {
+    private static func installedPrinter(_ queue: String) async -> Printer? {
         let options = parseOptions(await ProcessRunner.output(lpoptions, ["-p", queue]) ?? "")
+        guard isInstalledQueue(options) else { return nil }
         let info = options["printer-info"].flatMap { $0.isEmpty || $0 == queue ? nil : $0 }
         let helper = options["device-uri"].flatMap(singleCopyHelper(for:))
         var status = helper == nil ? status(queue: queue, options: options) : .ready
         if let helper, !isExecutableFile(helper) {
             status = .unavailable
         } else if status.canPrint {
-            let checked: Bool?? = await options["device-uri"].asyncMap(PrinterReachability.isReachable(deviceURI:))
-            if let reachable = checked ?? nil {
-                if !reachable { status = .offline }
-            } else {
-                status = .unavailable
+            switch await options["device-uri"].asyncMap(PrinterReachability.reach(deviceURI:)) {
+            case .reachable?: break
+            case .unreachable?: status = .offline
+            case .localNetworkBlocked?: status = .localNetworkBlocked
+            case .unconfirmed?, nil: status = .unavailable
             }
         }
         return Printer(
             id: queue, name: info ?? queue.replacingOccurrences(of: "_", with: " "), status: status,
             singleCopyHelper: helper
         )
+    }
+
+    static func isInstalledQueue(_ options: [String: String]) -> Bool {
+        options["printer-uri-supported"] != nil
     }
 
     private static func isExecutableFile(_ url: URL) -> Bool {

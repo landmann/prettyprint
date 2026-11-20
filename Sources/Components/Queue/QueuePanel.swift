@@ -55,50 +55,15 @@ struct QueuePanel: View {
     var body: some View {
         VStack(spacing: 10) {
             navbarHeader
-            printerList
-            Divider()
-            fileDropSurface
-            HStack(spacing: 8) {
-                Button(action: onQuit) {
-                    Text("Quit")
-                }
-                    .buttonStyle(PrettyPrintTileButtonStyle(size: .row, tint: .destructive))
-                    .prettyPrintHoverHighlight(.destructive)
-                    .prettyPrintButtonCursor()
-
-                Button(action: startBlankCanvas) {
-                    Text(isPrinting ? printingLabel : blankDocumentLabel)
-                        .font(.caption)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrettyPrintTileButtonStyle(size: .row))
-                .prettyPrintHoverHighlight(.accent)
-                .prettyPrintButtonCursor()
-                .disabled(isQueueLocked || isPresentingPrintResult)
-
-                Button { doPrint() } label: {
-                    Text("Print")
-                }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .environment(\.controlActiveState, .active)
-                    .disabled(!canPrint)
-                    .prettyPrintHoverHighlight(.primary)
-                    .prettyPrintButtonCursor()
-            }
-            if !isPrinting && !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .font(.caption)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .center)
+            if needsLocalNetworkSetup {
+                LocalNetworkAccessGuide(appIcon: Self.headerIcon)
+            } else {
+                queueContent
             }
         }
         .frame(width: 280)
         .padding(12)
-        .background(Color.black.opacity(0.85))
+        .background { HalftoneBackdrop() }
         .focusEffectDisabled()
         .prettyPrintKeyMonitor(handleKeyPress)
         .onAppear {
@@ -241,6 +206,90 @@ struct QueuePanel: View {
         return true
     }
 
+    private var needsLocalNetworkSetup: Bool {
+        printers.printers.contains { $0.status == .localNetworkBlocked }
+            && !printers.printers.contains { $0.status.canPrint }
+    }
+
+    @ViewBuilder
+    private var queueContent: some View {
+        printerList
+        Divider()
+        fileDropSurface
+        HStack(spacing: 8) {
+            Button(action: onQuit) {
+                Text("Quit")
+            }
+                .buttonStyle(PrettyPrintTileButtonStyle(size: .row, tint: .destructive))
+                .prettyPrintHoverHighlight(.destructive)
+                .prettyPrintButtonCursor()
+
+            Button(action: startBlankCanvas) {
+                Text(isPrinting ? printingLabel : blankDocumentLabel)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrettyPrintTileButtonStyle(size: .row))
+            .prettyPrintHoverHighlight(.accent)
+            .prettyPrintButtonCursor()
+            .disabled(isQueueLocked || isPresentingPrintResult)
+
+            Button { doPrint() } label: {
+                Text("Print")
+            }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .environment(\.controlActiveState, .active)
+                .disabled(!canPrint)
+                .prettyPrintHoverHighlight(.primary)
+                .prettyPrintButtonCursor()
+        }
+        if !isPrinting && !statusMessage.isEmpty {
+            Text(statusMessage)
+                .font(.caption)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    @ViewBuilder
+    private var navbarActions: some View {
+        if !printers.printers.isEmpty {
+            Button(action: showAddPrinter) {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
+            .accessibilityLabel("Add printer")
+            .help("Add printer")
+            .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
+            .prettyPrintButtonCursor()
+        }
+        Button(action: showShortcutSettings) {
+            Image(systemName: "gearshape")
+        }
+        .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
+        .accessibilityLabel("Settings")
+        .help("Settings")
+        .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
+        .prettyPrintButtonCursor()
+        Button {
+            isShowingPrintHistory.toggle()
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+        }
+        .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
+        .accessibilityLabel("Print history")
+        .help("Print history")
+        .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
+        .prettyPrintButtonCursor()
+        .popover(isPresented: $isShowingPrintHistory, arrowEdge: .top) {
+            printHistoryPopover
+        }
+    }
+
     private var navbarHeader: some View {
         HStack(spacing: 8) {
             if let icon = Self.headerIcon {
@@ -253,36 +302,8 @@ struct QueuePanel: View {
             }
             Text("PrettyPrint").font(.headline)
             Spacer()
-            if !printers.printers.isEmpty {
-                Button(action: showAddPrinter) {
-                    Image(systemName: "plus")
-                }
-                .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
-                .accessibilityLabel("Add printer")
-                .help("Add printer")
-                .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
-                .prettyPrintButtonCursor()
-            }
-            Button(action: showShortcutSettings) {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
-            .accessibilityLabel("Settings")
-            .help("Settings")
-            .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
-            .prettyPrintButtonCursor()
-            Button {
-                isShowingPrintHistory.toggle()
-            } label: {
-                Image(systemName: "clock.arrow.circlepath")
-            }
-            .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
-            .accessibilityLabel("Print history")
-            .help("Print history")
-            .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
-            .prettyPrintButtonCursor()
-            .popover(isPresented: $isShowingPrintHistory, arrowEdge: .top) {
-                printHistoryPopover
+            if !needsLocalNetworkSetup {
+                navbarActions
             }
             Button(action: onClosePopover) {
                 Image(systemName: "xmark")
@@ -642,6 +663,9 @@ struct QueuePanel: View {
         if !printers.printers.isEmpty {
             ForEach(printers.printers) { printer in
                 printerRow(title: printer.name, id: printer.id, status: printer.status, onRefresh: refreshPrinters)
+            }
+            if printers.printers.contains(where: { $0.status == .localNetworkBlocked }) {
+                LocalNetworkAccessNotice()
             }
         } else if printers.hasLoaded {
             Button(action: showAddPrinter) {
