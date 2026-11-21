@@ -169,6 +169,11 @@ struct QueuePanel: View {
         printers.refresh()
     }
 
+    private func recheckPrinter(_ id: String) {
+        guard !isPrinting else { return }
+        printers.recheck(id)
+    }
+
     private func showShortcutSettings() {
         isShowingPrintHistory = false
         onClosePopover()
@@ -663,7 +668,7 @@ struct QueuePanel: View {
     private var printerList: some View {
         if !printers.printers.isEmpty {
             ForEach(printers.printers) { printer in
-                printerRow(title: printer.name, id: printer.id, status: printer.status, onRefresh: refreshPrinters)
+                printerRow(title: printer.name, id: printer.id, status: printer.status) { recheckPrinter(printer.id) }
             }
             if printers.printers.contains(where: { $0.status == .localNetworkBlocked }) {
                 LocalNetworkAccessNotice()

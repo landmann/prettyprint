@@ -211,6 +211,7 @@ final class PrinterStore: ObservableObject {
     @Published private(set) var hasLoaded = false
     private(set) var refreshTask: Task<Void, Never>?
     private var capabilities: [String: PrinterCapabilities] = [:]
+    private var recheckIDs = Set<String>()
 
     init() {
         let remembered = UserDefaults.standard.array(forKey: Self.rememberedPrintersKey) as? [[String]] ?? []
@@ -226,17 +227,32 @@ final class PrinterStore: ObservableObject {
                 onDefault: { [weak self] id in self?.defaultPrinterID = id },
                 onPrinter: { [weak self] printer in await self?.show(printer) }
             )
-            printers = loaded.printers
+            let rechecking = recheckIDs
+            recheckIDs = []
+            printers = loaded.printers.map { rechecking.contains($0.id) ? checking($0) : $0 }
             UserDefaults.standard.set(loaded.printers.map { [$0.id, $0.name] }, forKey: Self.rememberedPrintersKey)
             hasLoaded = true
             refreshTask = nil
+            if !rechecking.isEmpty { refresh() }
         }
+    }
+
+    func recheck(_ id: String) {
+        guard let index = printers.firstIndex(where: { $0.id == id }) else { return }
+        printers[index] = checking(printers[index])
+        if refreshTask != nil { recheckIDs.insert(id) }
+        refresh()
+    }
+
+    private func checking(_ printer: Printer) -> Printer {
+        Printer(id: printer.id, name: printer.name, status: .checking, singleCopyHelper: printer.singleCopyHelper)
     }
 
     private func show(_ printer: Printer) async {
         if capabilities[printer.id] == nil {
             capabilities[printer.id] = await PrinterDirectory.capabilities(for: printer)
         }
+        guard !recheckIDs.contains(printer.id) else { return }
         if let index = printers.firstIndex(where: { $0.id == printer.id }) {
             printers[index] = printer
         } else {
