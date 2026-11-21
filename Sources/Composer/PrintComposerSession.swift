@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class PrintComposerDocument: ObservableObject, Identifiable {
@@ -113,6 +114,12 @@ final class PrintComposerSession: ObservableObject {
     var canGoToPreviousPage: Bool { adjacentPage(offset: -1) != nil }
     var canGoToNextPage: Bool { adjacentPage(offset: 1) != nil }
 
+    var canSaveSelectedDocument: Bool {
+        guard let document = selectedDocument, !document.isLoading, !document.loadFailed,
+              !document.pages.isEmpty else { return false }
+        return document.pages.allSatisfy { $0.composition != nil && !$0.loadFailed && $0.pendingImports == 0 }
+    }
+
     var canFinish: Bool {
         pendingDocumentImports == 0 && documents.allSatisfy {
             $0.canFinish && ($0.sides == .oneSided || supportedSides?.contains($0.sides) == true)
@@ -220,6 +227,11 @@ final class PrintComposerSession: ObservableObject {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
+        guard runPanel(panel) == .OK else { return }
+        onChoose(panel.urls)
+    }
+
+    private func runPanel(_ panel: NSSavePanel) -> NSApplication.ModalResponse {
         let window = NSApp.keyWindow
         let level = window?.level
         window?.level = .normal
@@ -228,8 +240,30 @@ final class PrintComposerSession: ObservableObject {
             window?.level = level
             window?.makeKeyAndOrderFront(nil)
         }
-        guard response == .OK else { return }
-        onChoose(panel.urls)
+        return response
+    }
+
+    func saveSelectedDocument() {
+        selectedDocument?.finishTextEditing()
+        guard canSaveSelectedDocument, let document = selectedDocument else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\((document.title as NSString).deletingPathExtension).pdf"
+        guard runPanel(panel) == .OK, let url = panel.url else { return }
+        do {
+            try render(document, to: url)
+            errorMessage = nil
+        } catch {
+            errorMessage = "Couldn’t save the PDF"
+        }
+    }
+
+    private func render(_ document: PrintComposerDocument, to url: URL) throws {
+        let sources = document.pages.reduce(into: [URL: PrintSource]()) { result, page in
+            result.merge(page.sources) { _, new in new }
+        }
+        try PrintCompositionRenderer.render(document.pages.compactMap(\.composition), sources: sources, to: url)
     }
 
     func addFiles(_ urls: [URL]) {
@@ -300,10 +334,7 @@ final class PrintComposerSession: ObservableObject {
                         let name = (document.title as NSString).deletingPathExtension
                         let url = try stager.makeComposedDocumentURL(named: "\(name) layout.pdf")
                         generated.append(url)
-                        let sources = document.pages.reduce(into: [URL: PrintSource]()) { result, page in
-                            result.merge(page.sources) { _, new in new }
-                        }
-                        try PrintCompositionRenderer.render(pages, sources: sources, to: url)
+                        try render(document, to: url)
                         if var original = saved {
                             original.fileURL = url
                             original.layoutPages = pages
@@ -336,6 +367,7 @@ final class PrintComposerSession: ObservableObject {
               let press = PrettyPrintKeyPress(event),
               let action = PrettyPrintShortcuts.shared.action(for: press, in: .editor) else { return false }
         switch action {
+        case .savePDF: saveSelectedDocument()
         case .done: done()
         case .cancel: cancel()
         case .addFiles: chooseFiles()

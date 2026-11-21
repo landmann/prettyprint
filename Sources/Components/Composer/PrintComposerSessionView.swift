@@ -86,6 +86,13 @@ struct PrintComposerSessionView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            Button(action: session.saveSelectedDocument) {
+                ComposerActionLabel("Save as PDF…", systemImage: "square.and.arrow.down")
+            }
+            .buttonStyle(.bordered)
+            .composerLargeButton(.accent)
+            .disabled(!session.canSaveSelectedDocument)
+            .help("Save this document to your Mac (⌘S)")
             HStack(spacing: 8) {
                 Button { session.activePage?.reset() } label: {
                     ComposerActionLabel("Reset")

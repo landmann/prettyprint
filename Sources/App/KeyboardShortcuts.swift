@@ -73,7 +73,7 @@ enum PrettyPrintShortcutAction: String, CaseIterable, Identifiable {
     case settings, addFiles, rename, close, history
     case blankCanvas, printFiles, quit, printer1, printer2, printer3, printer4, printer5, refreshPrinters, addPrinter
     case previousFile, nextFile, preview, removeFile, moreCopies, fewerCopies
-    case selectAll, copy, paste, duplicate, removeImage, fit, center, reset, done, cancel, deselect
+    case selectAll, copy, paste, duplicate, removeImage, fit, center, reset, savePDF, done, cancel, deselect
     case addText, editText, textFont, largerText, smallerText
     case previousImage, nextImage, aspect, rotateLeft, rotateRight, previousPage, nextPage
     case grid, moreHorizontal, fewerHorizontal, moreVertical, fewerVertical
@@ -123,6 +123,7 @@ enum PrettyPrintShortcutAction: String, CaseIterable, Identifiable {
         case .fit: "Fit selection to page"
         case .center: "Center selection"
         case .reset: "Reset layout"
+        case .savePDF: "Save as PDF"
         case .done: "Save layout"
         case .cancel: "Cancel editing"
         case .deselect: "Deselect layers / close editor"
@@ -218,6 +219,7 @@ enum PrettyPrintShortcutAction: String, CaseIterable, Identifiable {
         case .fit: [.init("f", .command)]
         case .center: [.init("e", .command)]
         case .reset: [.init("r", .command)]
+        case .savePDF: [.init("s", .command)]
         case .done: [.init("return"), .init("return", .command)]
         case .cancel: [.init(".", .command)]
         case .previousImage: [.init("up", .command)]
