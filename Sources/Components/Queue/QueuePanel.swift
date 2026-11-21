@@ -257,15 +257,16 @@ struct QueuePanel: View {
 
     @ViewBuilder
     private var navbarActions: some View {
-        if !printers.printers.isEmpty {
+        if !printers.printers.isEmpty || !printers.hasLoaded {
             Button(action: showAddPrinter) {
                 Image(systemName: "plus")
             }
             .buttonStyle(PrettyPrintTileButtonStyle(size: .small))
             .accessibilityLabel("Add printer")
-            .help("Add printer")
+            .help(printers.hasLoaded ? "Add printer" : "Checking your printers")
             .prettyPrintHoverHighlight(.accent, cornerRadius: 5)
             .prettyPrintButtonCursor()
+            .disabled(!printers.hasLoaded)
         }
         Button(action: showShortcutSettings) {
             Image(systemName: "gearshape")
@@ -676,9 +677,14 @@ struct QueuePanel: View {
             .prettyPrintHoverHighlight(.accent)
             .prettyPrintButtonCursor()
         } else {
-            PrettyPrintCheckingDots()
-                .frame(maxWidth: .infinity)
-                .accessibilityLabel("Loading printers")
+            HStack(spacing: 6) {
+                PrettyPrintCheckingDots()
+                Text("Looking for printers")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine)
         }
     }
 

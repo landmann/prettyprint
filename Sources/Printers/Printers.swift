@@ -16,9 +16,13 @@ enum PrinterDirectory {
     static let lpstat = "/usr/bin/lpstat"
     static let lpoptions = "/usr/bin/lpoptions"
 
-    static func load() async -> (printers: [Printer], defaultID: String?) {
+    static func load(
+        onDefault: (String?) async -> Void = { _ in },
+        onPrinter: (Printer) async -> Void = { _ in }
+    ) async -> (printers: [Printer], defaultID: String?) {
         async let queueOutput = ProcessRunner.output(lpstat, ["-e"])
-        async let defaultOutput = ProcessRunner.output(lpstat, ["-d"])
+        let defaultID = defaultPrinterID(inLpstatOutput: await ProcessRunner.output(lpstat, ["-d"]) ?? "")
+        await onDefault(defaultID)
         let queues = (await queueOutput ?? "").split(whereSeparator: \.isNewline).map(String.init)
         let printers = await withTaskGroup(of: (Int, Printer?).self) { group in
             for (index, queue) in queues.enumerated() {
@@ -26,11 +30,14 @@ enum PrinterDirectory {
             }
             var loaded: [(Int, Printer)] = []
             for await (index, printer) in group {
-                if let printer { loaded.append((index, printer)) }
+                if let printer {
+                    await onPrinter(printer)
+                    loaded.append((index, printer))
+                }
             }
             return loaded.sorted { $0.0 < $1.0 }.map(\.1)
         }
-        return (printers, defaultPrinterID(inLpstatOutput: await defaultOutput ?? ""))
+        return (printers, defaultID)
     }
 
     static func capabilities(for printer: Printer) async -> PrinterCapabilities {
@@ -197,23 +204,43 @@ enum PrinterDirectory {
 
 @MainActor
 final class PrinterStore: ObservableObject {
-    @Published private(set) var printers: [Printer] = []
+    private static let rememberedPrintersKey = "rememberedPrinters"
+
+    @Published private(set) var printers: [Printer]
     @Published private(set) var defaultPrinterID: String?
     @Published private(set) var hasLoaded = false
     private(set) var refreshTask: Task<Void, Never>?
     private var capabilities: [String: PrinterCapabilities] = [:]
 
+    init() {
+        let remembered = UserDefaults.standard.array(forKey: Self.rememberedPrintersKey) as? [[String]] ?? []
+        printers = remembered.compactMap { entry in
+            entry.count == 2 ? Printer(id: entry[0], name: entry[1], status: .checking) : nil
+        }
+    }
+
     func refresh() {
         guard refreshTask == nil else { return }
         refreshTask = Task {
-            let loaded = await PrinterDirectory.load()
-            for printer in loaded.printers where capabilities[printer.id] == nil {
-                capabilities[printer.id] = await PrinterDirectory.capabilities(for: printer)
-            }
+            let loaded = await PrinterDirectory.load(
+                onDefault: { [weak self] id in self?.defaultPrinterID = id },
+                onPrinter: { [weak self] printer in await self?.show(printer) }
+            )
             printers = loaded.printers
-            defaultPrinterID = loaded.defaultID
+            UserDefaults.standard.set(loaded.printers.map { [$0.id, $0.name] }, forKey: Self.rememberedPrintersKey)
             hasLoaded = true
             refreshTask = nil
+        }
+    }
+
+    private func show(_ printer: Printer) async {
+        if capabilities[printer.id] == nil {
+            capabilities[printer.id] = await PrinterDirectory.capabilities(for: printer)
+        }
+        if let index = printers.firstIndex(where: { $0.id == printer.id }) {
+            printers[index] = printer
+        } else {
+            printers.append(printer)
         }
     }
 
