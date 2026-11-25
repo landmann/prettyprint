@@ -32,18 +32,18 @@
 | Components / Shared | `Sources/Components/Shared` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 | Composer | `Sources/Composer` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 | Driver finder | `Sources/DriverFinder` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
+| PrinterReachability | `Sources/Printers/PrinterReachability.swift` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 | PrinterSelectionPolicy | `Sources/Printers/PrinterSelectionPolicy.swift` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 | PrinterStatus | `Sources/Printers/PrinterStatus.swift` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
-| Printers | `Sources/Printers/Printers.swift` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 | Queue | `Sources/Queue` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 | Subprocesses | `Sources/Support` | `2b14bde6fc7ad78d058e8b3b46a74b6047d4f23d` | 2026-11-25 | gpt-6.2-astra (high) |
 
-The reviewer read all 47 Swift files in round one and checked the fixes in round two. The rows above cover 44 files. The three files below changed after the second round.
+The reviewer read all 47 Swift files in round one, checked fixes in round two, and confirmed `R1-09` (`PrinterReachability.swift`) in round three. The rows above cover 44 files. The three files below were updated in `8747942` after round three (budget end) to treat CUPS `"No destinations added."` as an empty configured list and propagate `lpstat -e` / `lpoptions` failures to the retry UI.
 
 ## Open findings
 
 | File | Finding | Needed | Date |
 | --- | --- | --- | --- |
-| `Sources/Printers/PrinterReachability.swift` | R1-09, `target(forDeviceURI:)` now treats an empty USB serial as absent. | Re-review after change | 2026-11-25 |
-| `Sources/Printers/PrinterSetup.swift` | R1-08, `discover(excludingNames:)` now propagates failed CUPS queries. | Re-review after change | 2026-11-25 |
-| `Sources/Components/Printers/AddPrinterWindow.swift` | R1-08, `search()` clears stale discovery results and displays a retry message when a CUPS lookup fails. | Re-review after change | 2026-11-25 |
+| `Sources/Printers/PrinterSetup.swift` | R1-08 post-Round-3 fix (`8747942`): uses `PrinterDirectory.lpstatOutput(["-v"])` so zero-printer Macs still discover printers. | Re-review after change | 2026-11-25 |
+| `Sources/Printers/Printers.swift` | R1-08 post-Round-3 fix (`8747942`): added `lpstatOutput` (`LC_ALL=C` + `"No destinations added"` check) and `configuredNames()` propagating lookup failures. | Re-review after change | 2026-11-25 |
+| `Sources/Components/Printers/AddPrinterWindow.swift` | R1-08 post-Round-3 fix (`8747942`): `search()` calls `PrinterDirectory.configuredNames()` and shows retry UI on failure. | Re-review after change | 2026-11-25 |
