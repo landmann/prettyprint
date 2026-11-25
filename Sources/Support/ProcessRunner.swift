@@ -134,11 +134,12 @@ enum ProcessRunner {
         }
 
         let drainDeadline = DispatchTime.now() + drainGrace
-        _ = output.finished.wait(timeout: drainDeadline)
-        _ = errors.finished.wait(timeout: drainDeadline)
+        let outputDrained = output.finished.wait(timeout: drainDeadline)
+        let errorsDrained = errors.finished.wait(timeout: drainDeadline)
         outputPipe.fileHandleForReading.readabilityHandler = nil
         errorPipe.fileHandleForReading.readabilityHandler = nil
 
+        guard outputDrained == .success, errorsDrained == .success else { return nil }
         let (outputData, outputOverflowed) = output.result
         let (errorData, errorOverflowed) = errors.result
         guard !timedOut, !outputOverflowed, !errorOverflowed, process.terminationReason == .exit else { return nil }

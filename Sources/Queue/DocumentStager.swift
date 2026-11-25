@@ -28,12 +28,17 @@ final class PrettyPrintDocumentStager {
     }
 
     @MainActor
-    func stage(_ urls: [URL]) -> DocumentStagingResult {
+    func stage(_ urls: [URL?]) -> DocumentStagingResult {
         var stagedURLs: [URL] = []
         var failedCount = 0
 
-        for url in urls {
-            guard url.isFileURL else {
+        for candidate in urls {
+            guard let url = candidate, url.isFileURL else {
+                failedCount += 1
+                continue
+            }
+            let properties = try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+            if properties?.isDirectory == true && properties?.isPackage != true {
                 failedCount += 1
                 continue
             }

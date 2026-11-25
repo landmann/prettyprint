@@ -83,8 +83,8 @@ final class PrintComposerSession: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var scrollRequest: UUID?
     @Published private(set) var pendingDocumentImports = 0
-    let paper: PrintPaper
-    private let printer: Printer?
+    @Published private(set) var paper: PrintPaper
+    private let capabilityLookup: Task<PrinterCapabilities, Never>?
     var onFinish: ((PrintComposerResult?) -> Void)?
     private let originalDocumentIDs: Set<QueuedDocument.ID>
     private let stager = PrettyPrintDocumentStager()
@@ -92,7 +92,9 @@ final class PrintComposerSession: ObservableObject {
 
     init(request: PrintComposerRequest) {
         paper = request.paper
-        printer = request.printer
+        capabilityLookup = request.printer.map { printer in
+            Task { await PrinterDirectory.capabilities(for: printer) }
+        }
         originalDocumentIDs = Set(request.documents.map(\.id))
         documents = request.documents.map { PrintComposerDocument(document: $0) }
         if request.startsFromBlankCanvas {
@@ -127,11 +129,10 @@ final class PrintComposerSession: ObservableObject {
     }
 
     func loadCapabilities() async {
-        guard let printer else {
-            supportedSides = [.oneSided]
-            return
-        }
-        supportedSides = await PrinterDirectory.capabilities(for: printer).sides
+        guard supportedSides == nil else { return }
+        let capabilities = await capabilityLookup?.value
+        if let capabilities { paper = capabilities.paper }
+        supportedSides = capabilities?.sides ?? [.oneSided]
     }
 
     func loadSelectedDocument() async {
@@ -147,6 +148,7 @@ final class PrintComposerSession: ObservableObject {
     }
 
     func loadDocument(_ document: PrintComposerDocument) async {
+        await loadCapabilities()
         let paper = paper
         await Task { @MainActor [weak self] in
             await document.load(paper: paper) { page in
@@ -266,7 +268,7 @@ final class PrintComposerSession: ObservableObject {
         try PrintCompositionRenderer.render(document.pages.compactMap(\.composition), sources: sources, to: url)
     }
 
-    func addFiles(_ urls: [URL]) {
+    func addFiles(_ urls: [URL?]) {
         let staged = stager.stage(urls)
         let added = staged.urls.map { PrintComposerDocument(document: QueuedDocument(fileURL: $0)) }
         selectedDocument?.finishTextEditing()
@@ -282,12 +284,11 @@ final class PrintComposerSession: ObservableObject {
     }
 
     func addDroppedFiles(_ providers: [NSItemProvider]) -> Bool {
-        let supported = providers.filter { $0.canLoadObject(ofClass: URL.self) }
-        guard !supported.isEmpty else { return false }
+        guard providers.contains(where: { $0.canLoadObject(ofClass: URL.self) }) else { return false }
         pendingDocumentImports += 1
         let group = DispatchGroup()
-        var urls = Array<URL?>(repeating: nil, count: supported.count)
-        for (index, provider) in supported.enumerated() {
+        var urls = Array<URL?>(repeating: nil, count: providers.count)
+        for (index, provider) in providers.enumerated() where provider.canLoadObject(ofClass: URL.self) {
             group.enter()
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
                 DispatchQueue.main.async {
@@ -297,7 +298,7 @@ final class PrintComposerSession: ObservableObject {
             }
         }
         group.notify(queue: .main) {
-            self.addFiles(urls.compactMap { $0 })
+            self.addFiles(urls)
             self.pendingDocumentImports -= 1
         }
         return true

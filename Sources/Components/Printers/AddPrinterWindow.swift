@@ -65,6 +65,7 @@ final class AddPrinterModel: ObservableObject {
         case verified(DriverSuggestion, VerifiedDriverPackage)
         case manualInstall(DriverSuggestion)
         case installing
+        case downloadFailed(DriverSuggestion, String)
         case failed(String)
     }
 
@@ -150,7 +151,7 @@ final class AddPrinterModel: ObservableObject {
             downloads[printer.id] = nil
             switch result {
             case .success(let package): states[printer.id] = .verified(suggestion, package)
-            case .failure(let error): states[printer.id] = .failed(error.message)
+            case .failure(let error): states[printer.id] = .downloadFailed(suggestion, error.message)
             }
         }
     }
@@ -272,6 +273,8 @@ private struct AddPrinterView: View {
             actionButton("Open installer", prominent: true) { model.install(package, for: printer) }
         case .manualInstall:
             actionButton("Add", prominent: true) { model.add(printer) }
+        case .downloadFailed(let suggestion, _):
+            actionButton("Try again", prominent: false) { model.download(suggestion, for: printer) }
         case .failed:
             actionButton("Try again", prominent: false) { model.add(printer) }
         }
@@ -294,7 +297,7 @@ private struct AddPrinterView: View {
             suggestionCard(suggestion, status: "Install the driver from the manufacturer’s page, then click Add.")
         case .installing:
             caption("Finish installing. PrettyPrint adds the printer when the installer quits.")
-        case .failed(let message):
+        case .failed(let message), .downloadFailed(_, let message):
             Text(message).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).padding(.leading, 30)
         case .idle, .added:
             EmptyView()

@@ -37,6 +37,7 @@ struct QueuePanel: View {
     @State private var queuedDocuments: [QueuedDocument] = []
     @State var statusMessage = ""
     @State private var isPrinting = false
+    @State private var isEditingQueue = false
     @State private var printProgress: PrintBatchProgress?
     @State private var isClearingPrintResult = false
     @State private var printResultPresentation: PrintResultPresentation?
@@ -44,7 +45,7 @@ struct QueuePanel: View {
     @State private var isShowingPrintHistory = false
     @State private var nextDropSequence = 0
     @State private var nextDropToAppend = 0
-    @State private var pendingDropBatches: [Int: [URL]] = [:]
+    @State private var pendingDropBatches: [Int: [URL?]] = [:]
     @State private var navbarDraggedFileCount = 0
     private let documentStager = PrettyPrintDocumentStager()
     @StateObject private var printers = PrinterStore()
@@ -101,7 +102,7 @@ struct QueuePanel: View {
 
     private var canPrint: Bool {
         !queuedDocuments.isEmpty
-            && !isPrinting
+            && !isQueueLocked
             && !isPresentingPrintResult
             && selectedPrinterCanPrint
     }
@@ -111,7 +112,7 @@ struct QueuePanel: View {
     }
 
     private var isQueueLocked: Bool {
-        isPrinting || isClearingPrintResult
+        isPrinting || isClearingPrintResult || isEditingQueue
     }
 
     private var printingLabel: String {
@@ -181,6 +182,7 @@ struct QueuePanel: View {
     }
 
     private func selectPrinter(_ id: String) {
+        guard printers.printer(id)?.status.canPrint == true else { return }
         hasManualPrinterSelection = true
         printer = id
     }
@@ -543,7 +545,7 @@ struct QueuePanel: View {
         addFiles(onChooseFiles())
     }
 
-    private func addFiles(_ urls: [URL]) {
+    private func addFiles(_ urls: [URL?]) {
         guard !urls.isEmpty else { return }
 
         resetPrintResultPresentation()
@@ -565,6 +567,8 @@ struct QueuePanel: View {
     }
 
     private func presentEditor(selectedDocumentID: QueuedDocument.ID?, startsFromBlankCanvas: Bool = false) {
+        guard !isEditingQueue else { return }
+        isEditingQueue = true
         onCompose(PrintComposerRequest(
             documents: queuedDocuments,
             selectedDocumentID: selectedDocumentID,
@@ -572,12 +576,12 @@ struct QueuePanel: View {
             printer: printers.printer(printer),
             startsFromBlankCanvas: startsFromBlankCanvas
         )) { result in
+            isEditingQueue = false
             guard let result else { return }
             resetPrintResultPresentation()
             let addedWhileEditing = queuedDocuments.filter { !result.originalDocumentIDs.contains($0.id) }
             queuedDocuments = result.documents + addedWhileEditing
             self.selectedDocumentID = result.selectedDocumentID
-            statusMessage = ""
         }
     }
 
@@ -608,7 +612,7 @@ struct QueuePanel: View {
                 remainingProviders -= 1
 
                 guard remainingProviders == 0 else { return }
-                self.pendingDropBatches[sequence] = resolvedURLs.compactMap { $0 }
+                self.pendingDropBatches[sequence] = resolvedURLs
                 self.flushPendingDropBatches()
             }
         }

@@ -47,8 +47,11 @@ enum PrinterSetup {
         async let configured = ProcessRunner.output(PrinterDirectory.lpstat, ["-v"])
         let configuredURIs = configuredDeviceURIs(inLpstatOutput: await configured ?? "")
         let names = Set(configuredNames.map(normalized))
-        return parseDevices(await devices ?? "").filter {
-            !configuredURIs.contains($0.uri) && !names.contains(normalized($0.name))
+        let configuredSerials = Set(configuredURIs.compactMap(usbSerial))
+        return parseDevices(await devices ?? "").filter { device in
+            guard !configuredURIs.contains(device.uri) else { return false }
+            if let serial = usbSerial(device.uri) { return !configuredSerials.contains(serial) }
+            return !names.contains(normalized(device.name))
         }
     }
 
@@ -158,6 +161,11 @@ enum PrinterSetup {
     static func configuredQueues() async -> [String]? {
         guard let output = await ProcessRunner.output(PrinterDirectory.lpstat, ["-e"]) else { return nil }
         return output.split(whereSeparator: \.isNewline).map(String.init)
+    }
+
+    private static func usbSerial(_ uri: String) -> String? {
+        guard case .usb(_, let serial?) = PrinterReachability.target(forDeviceURI: uri), !serial.isEmpty else { return nil }
+        return serial.lowercased()
     }
 
     private static func normalized(_ name: String) -> String {

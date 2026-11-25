@@ -135,7 +135,7 @@ enum PrinterReachability {
         let serial: String?
 
         func matches(model: String, serial wanted: String?) -> Bool {
-            if let wanted, let serial { return serial.caseInsensitiveCompare(wanted) == .orderedSame }
+            if let wanted { return serial?.caseInsensitiveCompare(wanted) == .orderedSame }
             let modelName = model.split(separator: "/").last.map(String.init) ?? model
             return !modelName.isEmpty && product.localizedCaseInsensitiveContains(modelName)
         }
