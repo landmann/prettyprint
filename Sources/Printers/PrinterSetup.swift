@@ -42,13 +42,14 @@ enum PrinterSetup {
     static let lpinfo = "/usr/sbin/lpinfo"
     static let lpadmin = "/usr/sbin/lpadmin"
 
-    static func discover(excludingNames configuredNames: [String]) async -> [DiscoveredPrinter] {
+    static func discover(excludingNames configuredNames: [String]) async -> [DiscoveredPrinter]? {
         async let devices = ProcessRunner.output(lpinfo, ["-l", "-v", "--timeout", "10"], timeout: 30)
         async let configured = ProcessRunner.output(PrinterDirectory.lpstat, ["-v"])
-        let configuredURIs = configuredDeviceURIs(inLpstatOutput: await configured ?? "")
+        guard let configured = await configured, let devices = await devices else { return nil }
+        let configuredURIs = configuredDeviceURIs(inLpstatOutput: configured)
         let names = Set(configuredNames.map(normalized))
         let configuredUSBDevices = configuredURIs.compactMap(usbIdentity)
-        return parseDevices(await devices ?? "").filter { device in
+        return parseDevices(devices).filter { device in
             guard !configuredURIs.contains(device.uri) else { return false }
             if let deviceID = usbIdentity(device.uri) { return !configuredUSBDevices.contains(deviceID) }
             return !names.contains(normalized(device.name))
@@ -164,7 +165,7 @@ enum PrinterSetup {
     }
 
     private static func usbIdentity(_ uri: String) -> PrinterProbeTarget? {
-        guard case .usb(let model, let serial?) = PrinterReachability.target(forDeviceURI: uri), !serial.isEmpty else { return nil }
+        guard case .usb(let model, let serial?) = PrinterReachability.target(forDeviceURI: uri) else { return nil }
         return .usb(model: model.lowercased(), serial: serial.lowercased())
     }
 

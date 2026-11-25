@@ -38,7 +38,7 @@ enum PrinterReachability {
         case "usb", "ippusb":
             let model = (components.path.removingPercentEncoding ?? components.path)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let serial = components.queryItems?.first { $0.name == "serial" }?.value
+            let serial = components.queryItems?.first { $0.name == "serial" }?.value.flatMap { $0.isEmpty ? nil : $0 }
             return model.isEmpty && serial == nil ? nil : .usb(model: model, serial: serial)
         case "bluetooth":
             guard host.wholeMatch(of: #/(?:[0-9A-Fa-f]{12}|(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})/#) != nil else { return nil }

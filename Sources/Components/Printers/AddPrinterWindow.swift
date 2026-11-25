@@ -70,6 +70,7 @@ final class AddPrinterModel: ObservableObject {
     }
 
     @Published private(set) var isSearching = false
+    @Published private(set) var searchError: String?
     @Published private(set) var printers: [DiscoveredPrinter] = []
     @Published private(set) var states: [DiscoveredPrinter.ID: RowState] = [:]
     @Published private(set) var canFindDrivers = false
@@ -91,7 +92,13 @@ final class AddPrinterModel: ObservableObject {
         Task {
             async let routes = DriverFinder.availableRoutes()
             let configured = await PrinterDirectory.load().printers
-            let found = await PrinterSetup.discover(excludingNames: configured.map(\.name))
+            defer { isSearching = false }
+            guard let found = await PrinterSetup.discover(excludingNames: configured.map(\.name)) else {
+                printers = []
+                searchError = "Couldn’t read the printer list. Search again."
+                return
+            }
+            searchError = nil
             for (id, state) in states where !found.contains(where: { $0.id == id }) {
                 if case .verified(_, let package) = state { DriverInstaller.discard(package) }
                 states[id] = nil
@@ -99,7 +106,6 @@ final class AddPrinterModel: ObservableObject {
             }
             printers = found
             canFindDrivers = !(await routes).isEmpty
-            isSearching = false
         }
     }
 
@@ -185,7 +191,7 @@ private struct AddPrinterView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if model.printers.isEmpty {
-                    Text("No printers found nearby. Turn the printer on, connect it to this Wi‑Fi network or by USB, then search again.")
+                    Text(model.searchError ?? "No printers found nearby. Turn the printer on, connect it to this Wi‑Fi network or by USB, then search again.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: 320)
