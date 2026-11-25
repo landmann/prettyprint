@@ -552,7 +552,7 @@ struct QueuePanel: View {
         let result = documentStager.stage(urls)
         let stagedDocuments = result.urls.map { QueuedDocument(fileURL: $0) }
         queuedDocuments.append(contentsOf: stagedDocuments)
-        statusMessage = stagingStatusMessage(for: result.failedCount)
+        statusMessage = result.failureMessage ?? ""
         openComposer(for: stagedDocuments.first?.id)
     }
 
@@ -659,11 +659,6 @@ struct QueuePanel: View {
         }
     }
 
-    private func stagingStatusMessage(for failedCount: Int) -> String {
-        guard failedCount > 0 else { return "" }
-        let noun = failedCount == 1 ? "file" : "files"
-        return "Couldn’t add \(failedCount) \(noun)"
-    }
     @ViewBuilder
     private var printerList: some View {
         if !printers.printers.isEmpty {

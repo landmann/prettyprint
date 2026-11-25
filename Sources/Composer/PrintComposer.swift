@@ -226,10 +226,7 @@ final class PrintComposerModel: ObservableObject {
     func addFiles(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
         let staged = stager.stage(urls)
-        errorMessage = nil
-        if staged.failedCount > 0 {
-            errorMessage = staged.failedCount == 1 ? "Couldn’t add 1 file" : "Couldn’t add \(staged.failedCount) files"
-        }
+        errorMessage = staged.failureMessage
         pendingImports += 1
         Task {
             defer { pendingImports -= 1 }

@@ -3,6 +3,12 @@ import Foundation
 struct DocumentStagingResult {
     let urls: [URL]
     let failedCount: Int
+
+    var failureMessage: String? {
+        guard failedCount > 0 else { return nil }
+        let noun = failedCount == 1 ? "file" : "files"
+        return "Couldn’t add \(failedCount) \(noun)"
+    }
 }
 
 final class PrettyPrintDocumentStager {

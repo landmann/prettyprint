@@ -278,9 +278,7 @@ final class PrintComposerSession: ObservableObject {
             scrollRequest = UUID()
         }
         observeDocuments()
-        errorMessage = staged.failedCount > 0
-            ? "Couldn’t add \(staged.failedCount) \(staged.failedCount == 1 ? "file" : "files")"
-            : nil
+        errorMessage = staged.failureMessage
     }
 
     func addDroppedFiles(_ providers: [NSItemProvider]) -> Bool {
