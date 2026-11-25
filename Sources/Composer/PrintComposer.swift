@@ -239,11 +239,10 @@ final class PrintComposerModel: ObservableObject {
         }
     }
 
-    @discardableResult
-    private func addItem(for url: URL) async -> Bool {
+    private func addItem(for url: URL) async {
         guard composition != nil, let source = await loadSource(url) else {
             errorMessage = "Couldn’t open \(url.lastPathComponent)"
-            return false
+            return
         }
 
         let cascade = CGFloat(composition?.items.count ?? 0) * Self.duplicateOffset
@@ -256,7 +255,6 @@ final class PrintComposerModel: ObservableObject {
         textFocusRequest = nil
         composition?.items.append(item)
         selectedItemID = item.id
-        return true
     }
 
     @discardableResult
