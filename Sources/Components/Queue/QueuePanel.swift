@@ -540,11 +540,14 @@ struct QueuePanel: View {
     }
 
     private func chooseFiles() {
-        let selectedURLs = onChooseFiles()
-        guard !selectedURLs.isEmpty else { return }
+        addFiles(onChooseFiles())
+    }
+
+    private func addFiles(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
 
         resetPrintResultPresentation()
-        let result = documentStager.stage(selectedURLs)
+        let result = documentStager.stage(urls)
         let stagedDocuments = result.urls.map { QueuedDocument(fileURL: $0) }
         queuedDocuments.append(contentsOf: stagedDocuments)
         statusMessage = stagingStatusMessage(for: result.failedCount)
@@ -627,14 +630,7 @@ struct QueuePanel: View {
     private func flushPendingDropBatches() {
         while let batch = pendingDropBatches.removeValue(forKey: nextDropToAppend) {
             nextDropToAppend += 1
-            guard !batch.isEmpty else { continue }
-
-            resetPrintResultPresentation()
-            let result = documentStager.stage(batch)
-            let stagedDocuments = result.urls.map { QueuedDocument(fileURL: $0) }
-            queuedDocuments.append(contentsOf: stagedDocuments)
-            statusMessage = stagingStatusMessage(for: result.failedCount)
-            openComposer(for: stagedDocuments.first?.id)
+            addFiles(batch)
         }
     }
 

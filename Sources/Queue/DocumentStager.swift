@@ -89,16 +89,15 @@ final class PrettyPrintDocumentStager {
                 let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
                 return left > right
             }
-            .compactMap { url in
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                var stale = false
-                return try? URL(resolvingBookmarkData: data, options: [.withoutUI, .withoutMounting],
-                                relativeTo: nil, bookmarkDataIsStale: &stale)
-            }
+            .compactMap(resolveBookmark)
     }
 
     func originalURL(for stagedURL: URL) -> URL? {
-        guard let data = try? Data(contentsOf: originalBookmarkURL(for: stagedURL)) else { return nil }
+        resolveBookmark(originalBookmarkURL(for: stagedURL))
+    }
+
+    private func resolveBookmark(_ url: URL) -> URL? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
         var stale = false
         return try? URL(
             resolvingBookmarkData: data,
