@@ -139,12 +139,13 @@ enum ProcessRunner {
         outputPipe.fileHandleForReading.readabilityHandler = nil
         errorPipe.fileHandleForReading.readabilityHandler = nil
 
-        let (outputData, overflowed) = output.result
-        guard !timedOut, !overflowed, process.terminationReason == .exit else { return nil }
+        let (outputData, outputOverflowed) = output.result
+        let (errorData, errorOverflowed) = errors.result
+        guard !timedOut, !outputOverflowed, !errorOverflowed, process.terminationReason == .exit else { return nil }
         return ProcessOutput(
             exitCode: process.terminationStatus,
             standardOutput: String(decoding: outputData, as: UTF8.self),
-            standardError: String(decoding: errors.result.0, as: UTF8.self)
+            standardError: String(decoding: errorData, as: UTF8.self)
         )
     }
 }
