@@ -23,10 +23,13 @@ enum PrinterDirectory {
             return nil
         }
         if result.succeeded { return result.standardOutput }
-        if result.exitCode == 1,
-           result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           result.standardError.contains("No destinations added") {
-            return ""
+        if arguments == ["-v"], result.exitCode == 1 {
+            let out = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+            let err = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+            let emptyDiagnostics: Set<String> = ["lpstat: No destinations added.", "No destinations added."]
+            if (out.isEmpty && emptyDiagnostics.contains(err)) || (err.isEmpty && emptyDiagnostics.contains(out)) {
+                return ""
+            }
         }
         return nil
     }
