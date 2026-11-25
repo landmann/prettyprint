@@ -91,9 +91,9 @@ final class AddPrinterModel: ObservableObject {
         isSearching = true
         Task {
             async let routes = DriverFinder.availableRoutes()
-            let configured = await PrinterDirectory.load().printers
             defer { isSearching = false }
-            guard let found = await PrinterSetup.discover(excludingNames: configured.map(\.name)) else {
+            guard let configuredNames = await PrinterDirectory.configuredNames(),
+                  let found = await PrinterSetup.discover(excludingNames: configuredNames) else {
                 printers = []
                 searchError = "Couldn’t read the printer list. Search again."
                 return

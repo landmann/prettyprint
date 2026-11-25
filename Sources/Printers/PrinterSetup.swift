@@ -44,7 +44,7 @@ enum PrinterSetup {
 
     static func discover(excludingNames configuredNames: [String]) async -> [DiscoveredPrinter]? {
         async let devices = ProcessRunner.output(lpinfo, ["-l", "-v", "--timeout", "10"], timeout: 30)
-        async let configured = ProcessRunner.output(PrinterDirectory.lpstat, ["-v"])
+        async let configured = PrinterDirectory.lpstatOutput(["-v"])
         guard let configured = await configured, let devices = await devices else { return nil }
         let configuredURIs = configuredDeviceURIs(inLpstatOutput: configured)
         let names = Set(configuredNames.map(normalized))

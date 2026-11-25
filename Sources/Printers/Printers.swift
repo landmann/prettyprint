@@ -16,6 +16,45 @@ enum PrinterDirectory {
     static let lpstat = "/usr/bin/lpstat"
     static let lpoptions = "/usr/bin/lpoptions"
 
+    static func lpstatOutput(_ arguments: [String]) async -> String? {
+        var environment = ProcessInfo.processInfo.environment
+        environment["LC_ALL"] = "C"
+        guard let result = await ProcessRunner.run(lpstat, arguments, environment: environment) else {
+            return nil
+        }
+        if result.succeeded { return result.standardOutput }
+        if result.exitCode == 1,
+           result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           result.standardError.contains("No destinations added") {
+            return ""
+        }
+        return nil
+    }
+
+    static func configuredNames() async -> [String]? {
+        guard let queueOutput = await lpstatOutput(["-e"]) else { return nil }
+        let queues = queueOutput.split(whereSeparator: \.isNewline).map(String.init)
+        return await withTaskGroup(of: (Int, String?, Bool).self) { group in
+            for (index, queue) in queues.enumerated() {
+                group.addTask {
+                    guard let raw = await ProcessRunner.output(lpoptions, ["-p", queue]) else {
+                        return (index, nil, false)
+                    }
+                    let options = parseOptions(raw)
+                    guard isInstalledQueue(options) else { return (index, nil, true) }
+                    let info = options["printer-info"].flatMap { $0.isEmpty || $0 == queue ? nil : $0 }
+                    return (index, info ?? queue.replacingOccurrences(of: "_", with: " "), true)
+                }
+            }
+            var loaded: [(Int, String)] = []
+            for await (index, name, ok) in group {
+                guard ok else { return nil }
+                if let name { loaded.append((index, name)) }
+            }
+            return loaded.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
     static func load(
         onDefault: (String?) async -> Void = { _ in },
         onPrinter: (Printer) async -> Void = { _ in }
